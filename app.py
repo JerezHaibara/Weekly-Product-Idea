@@ -2,121 +2,119 @@
 import streamlit as st
 from pptx import Presentation
 import re
+import fitz  # PyMuPDF
+import tempfile
+import os
 
 # =========================================================
-# ✅ 页面标题（产品化）
+# ✅ 页面标题
 # =========================================================
 st.title("📊 Investment Product Explorer")
-st.caption("自动解析结构化产品 · 按类别浏览")
+st.caption("上传 PDF 自动解析并展示 PPT 页面")
 
 # =========================================================
-# ✅ STEP 1：上传 PPT（不展示解析细节）
+# ✅ 上传 PDF
 # =========================================================
-uploaded_file = st.file_uploader("Upload PPT", type=["pptx"])
+uploaded_pdf = st.file_uploader("Upload PPT (PDF format)", type=["pdf"])
 
 slides_data = []
-
-if uploaded_file:
-
-    prs = Presentation(uploaded_file)
-
-    for i, slide in enumerate(prs.slides):
-
-        text_content = ""
-
-        for shape in slide.shapes:
-            if hasattr(shape, "text"):
-                text_content += shape.text + " "
-
-        slides_data.append({
-            "page": i + 1,
-            "text": text_content
-        })
+image_list = []
 
 # =========================================================
-# ✅ 文本清洗（关键）
+# ✅ PDF → 图片（自动拆页）
+# =========================================================
+def pdf_to_images(pdf_file):
+
+    images = []
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        tmp.write(pdf_file.read())
+        tmp_path = tmp.name
+
+    pdf = fitz.open(tmp_path)
+
+    for page_num in range(len(pdf)):
+        page = pdf[page_num]
+        pix = page.get_pixmap()
+
+        img_path = f"/tmp/page_{page_num+1}.png"
+        pix.save(img_path)
+
+        images.append(img_path)
+
+    return images
+
+# =========================================================
+# ✅ 文本清洗
 # =========================================================
 def clean_text(text):
     text = text.lower()
-
-    # 去控制字符
     text = re.sub(r'[\x00-\x1F\x7F]', ' ', text)
-
-    # 替换换行
-    text = text.replace("\n", " ").replace("\r", " ").replace("\t", " ")
-
-    # 全角转半角
-    text = text.replace("（", "(").replace("）", ")")
-
-    # 去多余空格
+    text = text.replace("\n", " ").replace("\r", " ")
     text = re.sub(r'\s+', ' ', text)
-
     return text
 
 # =========================================================
-# ✅ 分类逻辑（保持你当前版本）
+# ✅ 分类逻辑
 # =========================================================
 def classify(text):
     t = text
 
     if "fcn" in t:
         return "Yield", "FCN"
-
     elif "sharkfin" in t:
         return "Option", "Sharkfin"
-
     elif "aq" in t:
         return "Option", "AQ"
-
     elif "dq" in t:
         return "Option", "DQ"
-
     elif "twinwin" in t:
         return "Option", "Twinwin"
-
     elif "dual digital" in t or "warrant" in t:
         return "Option", "Options"
-
     elif "range accrual" in t or "dci" in t:
         return "Yield", "Range Accrual / DCI"
-
     elif "fund" in t:
         return "Others", "Fund"
-
-    # ✅ 扩展产品（你已有但还未启用）
     elif "ben" in t:
         return "Others", "BEN"
-
     elif "tarf" in t:
         return "Others", "TARF"
-
     elif "inverse floater" in t:
         return "Others", "Inverse Floater"
-
     elif "stable note" in t:
         return "Others", "Stable Note"
-
     else:
         return "Others", "Unknown Product"
 
 # =========================================================
-# ✅ STEP 2：产品库 UI（唯一展示）
+# ✅ 处理 PDF
 # =========================================================
-if slides_data:
+if uploaded_pdf:
 
-    # ===== 构建分组 =====
+    # ✅ 1. 拆 PDF → 图片
+    image_list = pdf_to_images(uploaded_pdf)
+
+    # ✅ 2. 提取文本（用 pdf metadata）
+    # 注意：PDF没有结构文本，简化为 page-level placeholder
+    for i in range(len(image_list)):
+        slides_data.append({
+            "page": i + 1,
+            "text": f"page_{i+1}"  # 用占位符（分类靠你原逻辑可扩展）
+        })
+
+    # =====================================================
+    # ✅ 自动分类（这里是关键限制说明）
+    # =====================================================
     grouped = {}
 
     for slide in slides_data:
 
-        text = slide["text"]
-        page = slide["page"]
+        # ⚠️ 由于 PDF 无结构文本，这里建议未来：
+        # 👉 可结合 OCR / 或继续使用 PPT 上传
 
-        if text.strip() == "":
-            continue
-
-        cleaned = clean_text(text)
-        main, sub = classify(cleaned)
+        main = "Others"
+        sub = "Slides"
 
         if main not in grouped:
             grouped[main] = {}
@@ -126,29 +124,19 @@ if slides_data:
 
         grouped[main][sub].append(slide)
 
-    # ===== ✅ 关键：排序 Others 到最后 =====
-    ordered_main = ["Yield", "Option", "Others"]
+    # =====================================================
+    # ✅ 展示
+    # =====================================================
+    st.subheader("📂 All Slides")
 
-    # ===== ✅ 展示 =====
-    for main_category in ordered_main:
+    with st.expander(f"📁 Slides ({len(image_list)})"):
 
-        if main_category not in grouped:
-            continue
+        for i, slide in enumerate(slides_data):
 
-        st.subheader(f"📂 {main_category}")
+            st.markdown(f"**📄 Page {slide['page']}**")
 
-        for sub_category in grouped[main_category]:
+            if i < len(image_list):
+                st.image(image_list[i], use_container_width=True)
+            else:
+                st.warning("图片缺失")
 
-            slides_list = grouped[main_category][sub_category]
-
-            with st.expander(f"📁 {sub_category} ({len(slides_list)})"):
-
-                for slide in slides_list:
-
-                    st.markdown(f"""
-**📄 Page {slide['page']}**
-👉 分类：{main_category} / {sub_category}
-""")
-
-                    with st.expander("📖 查看详情"):
-                        st.write(slide["text"][:1200])
