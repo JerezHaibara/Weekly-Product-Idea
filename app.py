@@ -132,3 +132,56 @@ if slides_data:
 
         st.write(f"Page {page} → {main} / {sub}")
 
+
+# =========================================================
+# 🟪 STEP 4：产品库展示（新功能 🚀）
+# =========================================================
+if slides_data:
+
+    st.header("STEP 3：产品库（分类展示）")
+
+    # ✅ 构建分组结构
+    grouped = {}
+
+    for slide in slides_data:
+        text = slide["text"]
+        page = slide["page"]
+
+        if text.strip() == "":
+            continue
+
+        cleaned = clean_text(text)
+        main, sub = classify(cleaned)
+
+        # 跳过非产品
+        if main == "Skip":
+            continue
+
+        # 构造分组
+        if main not in grouped:
+            grouped[main] = {}
+
+        if sub not in grouped[main]:
+            grouped[main][sub] = []
+
+        grouped[main][sub].append(slide)
+
+    # ✅ UI展示
+    for main_category in grouped:
+
+        st.subheader(f"📂 {main_category}")
+
+        for sub_category in grouped[main_category]:
+
+            slides_list = grouped[main_category][sub_category]
+
+            with st.expander(f"📁 {sub_category} ({len(slides_list)})"):
+
+                for slide in slides_list:
+
+                    st.markdown(f"**Page {slide['page']}**")
+
+                    # 折叠查看内容
+                    with st.expander("查看内容"):
+                        st.write(slide["text"][:1000])
+
