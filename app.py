@@ -4,13 +4,13 @@ from pptx import Presentation
 import re
 
 # =========================================================
-# 🟩 STEP 0：页面标题
+# ✅ 页面标题（产品化）
 # =========================================================
-st.title("Investment Product Hub")
-st.write("PPT 自动解析 + 产品分类系统")
+st.title("📊 Investment Product Explorer")
+st.caption("自动解析结构化产品 · 按类别浏览")
 
 # =========================================================
-# 🟦 STEP 1：上传 PPT + 读取文本
+# ✅ STEP 1：上传 PPT（不展示解析细节）
 # =========================================================
 uploaded_file = st.file_uploader("Upload PPT", type=["pptx"])
 
@@ -18,11 +18,7 @@ slides_data = []
 
 if uploaded_file:
 
-    st.success("Upload successful ✅")
-
     prs = Presentation(uploaded_file)
-
-    st.header("STEP 1：原始读取结果（每一页）")
 
     for i, slide in enumerate(prs.slides):
 
@@ -32,20 +28,13 @@ if uploaded_file:
             if hasattr(shape, "text"):
                 text_content += shape.text + " "
 
-        if text_content.strip() == "":
-            st.write(f"Page {i+1} → ⚠️ 空白页")
-        else:
-            st.write(f"Page {i+1}")
-            st.write(text_content[:300])
-
-        # ✅ 存入数据池
         slides_data.append({
             "page": i + 1,
             "text": text_content
         })
 
 # =========================================================
-# 🟨 STEP 2A：文本清洗（关键升级）
+# ✅ 文本清洗（关键）
 # =========================================================
 def clean_text(text):
     text = text.lower()
@@ -53,10 +42,10 @@ def clean_text(text):
     # 去控制字符
     text = re.sub(r'[\x00-\x1F\x7F]', ' ', text)
 
-    # 替换换行等
+    # 替换换行
     text = text.replace("\n", " ").replace("\r", " ").replace("\t", " ")
 
-    # 全角转半角（常见）
+    # 全角转半角
     text = text.replace("（", "(").replace("）", ")")
 
     # 去多余空格
@@ -65,85 +54,61 @@ def clean_text(text):
     return text
 
 # =========================================================
-# 🟨 STEP 2B：分类逻辑（产品优先识别）
+# ✅ 分类逻辑（保持你当前版本）
 # =========================================================
 def classify(text):
     t = text
 
-    # ===== 产品优先识别 =====
-
-    # FCN
     if "fcn" in t:
         return "Yield", "FCN"
 
-    # Sharkfin
     elif "sharkfin" in t:
         return "Option", "Sharkfin"
 
-    # AQ
     elif "aq" in t:
         return "Option", "AQ"
 
-    # DQ
     elif "dq" in t:
         return "Option", "DQ"
 
-    # Twinwin
     elif "twinwin" in t:
         return "Option", "Twinwin"
 
-    # Dual Digital / Warrant
     elif "dual digital" in t or "warrant" in t:
         return "Option", "Options"
 
-    # Range Accrual / DCI
     elif "range accrual" in t or "dci" in t:
         return "Yield", "Range Accrual / DCI"
 
-    # Fund
-    elif "fund" in t or "对冲基金" in t:
+    elif "fund" in t:
         return "Others", "Fund"
 
-    # fallback（理论很少触发）
+    # ✅ 扩展产品（你已有但还未启用）
+    elif "ben" in t:
+        return "Others", "BEN"
+
+    elif "tarf" in t:
+        return "Others", "TARF"
+
+    elif "inverse floater" in t:
+        return "Others", "Inverse Floater"
+
+    elif "stable note" in t:
+        return "Others", "Stable Note"
+
     else:
         return "Others", "Unknown Product"
 
 # =========================================================
-# 🟥 STEP 3：分类展示
+# ✅ STEP 2：产品库 UI（唯一展示）
 # =========================================================
 if slides_data:
 
-    st.header("STEP 2：分类结果")
-
-    for slide in slides_data:
-
-        page = slide["page"]
-        text = slide["text"]
-
-        if text.strip() == "":
-            st.write(f"Page {page} → ⚠️ 空白页")
-            continue
-
-        # ✅ 先清洗
-        cleaned = clean_text(text)
-
-        # ✅ 再分类（用完整文本，不截断）
-        main, sub = classify(cleaned)
-
-        st.write(f"Page {page} → {main} / {sub}")
-
-
-# =========================================================
-# 🟪 STEP 4：产品库展示（新功能 🚀）
-# =========================================================
-if slides_data:
-
-    st.header("STEP 3：产品库（分类展示）")
-
-    # ✅ 构建分组结构
+    # ===== 构建分组 =====
     grouped = {}
 
     for slide in slides_data:
+
         text = slide["text"]
         page = slide["page"]
 
@@ -153,11 +118,6 @@ if slides_data:
         cleaned = clean_text(text)
         main, sub = classify(cleaned)
 
-        # 跳过非产品
-        if main == "Skip":
-            continue
-
-        # 构造分组
         if main not in grouped:
             grouped[main] = {}
 
@@ -166,8 +126,14 @@ if slides_data:
 
         grouped[main][sub].append(slide)
 
-    # ✅ UI展示
-    for main_category in grouped:
+    # ===== ✅ 关键：排序 Others 到最后 =====
+    ordered_main = ["Yield", "Option", "Others"]
+
+    # ===== ✅ 展示 =====
+    for main_category in ordered_main:
+
+        if main_category not in grouped:
+            continue
 
         st.subheader(f"📂 {main_category}")
 
@@ -179,9 +145,10 @@ if slides_data:
 
                 for slide in slides_list:
 
-                    st.markdown(f"**Page {slide['page']}**")
+                    st.markdown(f"""
+**📄 Page {slide['page']}**
+👉 分类：{main_category} / {sub_category}
+""")
 
-                    # 折叠查看内容
-                    with st.expander("查看内容"):
-                        st.write(slide["text"][:1000])
-
+                    with st.expander("📖 查看详情"):
+                        st.write(slide["text"][:1200])
