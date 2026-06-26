@@ -12,7 +12,20 @@ st.title("📊 Investment Product Explorer")
 st.caption("PPT分类 + PDF原页面展示（完全自动）")
 
 # =========================================================
-# ✅ 上传（必须两个）
+# ✅ 使用说明（你新增要求）
+# =========================================================
+st.info("""
+📌 使用说明：
+请上传【同一份文件】的两个版本：
+
+1️⃣ PPTX（用于分类）  
+2️⃣ PDF（用于页面展示）
+
+⚠️ 必须保证两者页数完全一致，否则无法匹配
+""")
+
+# =========================================================
+# ✅ 上传文件
 # =========================================================
 ppt_file = st.file_uploader("Upload PPTX (for classification)", type=["pptx"])
 pdf_file = st.file_uploader("Upload PDF (for display)", type=["pdf"])
@@ -43,7 +56,7 @@ def pdf_to_images(pdf_file):
     return images
 
 # =========================================================
-# ✅ 清洗文本
+# ✅ 文本清洗
 # =========================================================
 def clean_text(text):
     text = text.lower()
@@ -51,7 +64,7 @@ def clean_text(text):
     return text
 
 # =========================================================
-# ✅ 分类逻辑（你的核心）
+# ✅ 分类逻辑（已修改 Unknown）
 # =========================================================
 def classify(text):
     t = text
@@ -81,16 +94,15 @@ def classify(text):
     elif "stable note" in t:
         return "Others", "Stable Note"
     else:
-        return "Others", "Unknown Product"
+        # ✅ 修改点：Unknown 单独分类
+        return "Unknown Information", "Unknown"
 
 # =========================================================
 # ✅ 主逻辑
 # =========================================================
 if ppt_file and pdf_file:
 
-    # -------------------------------------------
-    # ✅ 1️⃣ 解析 PPT（获取分类）
-    # -------------------------------------------
+    # ✅ 1️⃣ PPT解析（分类）
     prs = Presentation(ppt_file)
 
     for i, slide in enumerate(prs.slides):
@@ -106,18 +118,28 @@ if ppt_file and pdf_file:
             "text": text_content
         })
 
-    # -------------------------------------------
-    # ✅ 2️⃣ PDF 转图片
-    # -------------------------------------------
+    # ✅ 2️⃣ PDF拆页
     image_list = pdf_to_images(pdf_file)
 
-    # ✅ 页数检查
+    # =====================================================
+    # ✅ 页数校验（你要求的）
+    # =====================================================
     if len(slides_data) != len(image_list):
-        st.warning(f"⚠️ 页数不一致：PPT({len(slides_data)}) vs PDF({len(image_list)})")
 
-    # -------------------------------------------
-    # ✅ 3️⃣ 分类构建（✅已修复你之前的bug）
-    # -------------------------------------------
+        st.error(f"""
+❌ 页数不一致！
+
+PPT 页数：{len(slides_data)}  
+PDF 页数：{len(image_list)}
+
+👉 请使用【同一文件】导出的 PDF
+""")
+
+        st.stop()
+
+    # =====================================================
+    # ✅ 分类构建（已修复 bug）
+    # =====================================================
     grouped = {}
 
     for slide in slides_data:
@@ -125,27 +147,40 @@ if ppt_file and pdf_file:
         cleaned = clean_text(slide["text"])
         main, sub = classify(cleaned)
 
-        # ✅ 一级分类
         if main not in grouped:
             grouped[main] = {}
 
-        # ✅ 二级分类（关键修复点）
         if sub not in grouped[main]:
             grouped[main][sub] = []
 
-        # ✅ 添加 slide
         grouped[main][sub].append(slide)
 
-    # -------------------------------------------
-    # ✅ 4️⃣ 展示（核心：page 对齐）
-    # -------------------------------------------
-    ordered_main = ["Yield", "Option", "Others"]
+    # =====================================================
+    # ✅ 展示顺序（Unknown 放最后）
+    # =====================================================
+    ordered_main = ["Yield", "Option", "Others", "Unknown Information"]
 
     for main_category in ordered_main:
 
         if main_category not in grouped:
             continue
 
+        # ✅ 特殊处理 Unknown（只显示一层）
+        if main_category == "Unknown Information":
+
+            unknown_list = grouped[main_category]["Unknown"]
+
+            st.subheader(f"📂 Unknown Information ({len(unknown_list)})")
+
+            for slide in unknown_list:
+                page_num = slide["page"]
+
+                st.markdown(f"**📄 Page {page_num}**")
+                _ = st.image(image_list[page_num - 1], use_container_width=True)
+
+            continue
+
+        # ✅ 正常分类
         st.subheader(f"📂 {main_category}")
 
         for sub_category, slides_list in grouped[main_category].items():
@@ -158,8 +193,4 @@ if ppt_file and pdf_file:
 
                     st.markdown(f"**📄 Page {page_num}**")
 
-                    # ✅ 关键对齐逻辑
-                    if page_num - 1 < len(image_list):
-                        _ = st.image(image_list[page_num - 1], use_container_width=True)
-                    else:
-                        st.error(f"❌ 缺少 PDF 第 {page_num} 页")
+                    _ = st.image(image_list[page_num - 1], use_container_width=True)
