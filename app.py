@@ -10,10 +10,10 @@ import os
 # ✅ 页面标题
 # =========================================================
 st.title("📊 Investment Product Explorer")
-st.caption("上传 PPT + PDF，实现自动分类 + PPT页面展示")
+st.caption("上传 PPT + PDF，实现自动分类 + 原始页面展示")
 
 # =========================================================
-# ✅ 上传文件
+# ✅ 上传文件（两个）
 # =========================================================
 ppt_file = st.file_uploader("Upload PPTX (for classification)", type=["pptx"])
 pdf_file = st.file_uploader("Upload PDF (for display)", type=["pdf"])
@@ -22,7 +22,7 @@ slides_data = []
 image_list = []
 
 # =========================================================
-# ✅ PDF → 图片
+# ✅ PDF → 图片（自动拆页）
 # =========================================================
 def pdf_to_images(pdf_file):
 
@@ -85,7 +85,7 @@ def classify(text):
         return "Others", "Unknown Product"
 
 # =========================================================
-# ✅ 处理逻辑（必须两个文件都上传）
+# ✅ 主逻辑
 # =========================================================
 if ppt_file and pdf_file:
 
@@ -105,8 +105,12 @@ if ppt_file and pdf_file:
             "text": text_content
         })
 
-    # ✅ 2️⃣ PDF 拆图（展示用）
+    # ✅ 2️⃣ 拆 PDF（展示用）
     image_list = pdf_to_images(pdf_file)
+
+    # ✅ 安全检查（非常关键）
+    if len(image_list) != len(slides_data):
+        st.warning(f"⚠️ 页数不一致：PPT({len(slides_data)}) vs PDF({len(image_list)})")
 
     # ✅ 3️⃣ 分类
     grouped = {}
@@ -119,12 +123,12 @@ if ppt_file and pdf_file:
         if main not in grouped:
             grouped[main] = {}
 
-        if sub not in grouped[main]:
+        if sub not in grouped:
             grouped[main][sub] = []
 
         grouped[main][sub].append(slide)
 
-    # ✅ 顺序
+    # ✅ 顺序（Others最后）
     ordered_main = ["Yield", "Option", "Others"]
 
     # ✅ 4️⃣ 展示
@@ -135,19 +139,18 @@ if ppt_file and pdf_file:
 
         st.subheader(f"📂 {main_category}")
 
-        for sub_category in grouped[main_category]:
-
-            slides_list = grouped[main_category][sub_category]
+        for sub_category, slides_list in grouped[main_category].items():
 
             with st.expander(f"📁 {sub_category} ({len(slides_list)})"):
 
                 for slide in slides_list:
 
                     page_num = slide["page"]
+
                     st.markdown(f"**📄 Page {page_num}**")
 
+                    # ✅ 显示对应 PPT 页面图片
                     if page_num - 1 < len(image_list):
                         st.image(image_list[page_num - 1], use_container_width=True)
                     else:
-                        st.warning("缺少对应PDF页面")
-
+                        st.error("❌ 找不到对应 PDF 页面")
