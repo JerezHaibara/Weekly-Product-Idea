@@ -1,27 +1,28 @@
 
 import streamlit as st
 from pptx import Presentation
-import re
 import fitz  # PyMuPDF
 import tempfile
+import re
 import os
 
 # =========================================================
 # ✅ 页面标题
 # =========================================================
 st.title("📊 Investment Product Explorer")
-st.caption("上传 PDF 自动解析并展示 PPT 页面")
+st.caption("上传 PPT + PDF，实现自动分类 + PPT页面展示")
 
 # =========================================================
-# ✅ 上传 PDF
+# ✅ 上传文件
 # =========================================================
-uploaded_pdf = st.file_uploader("Upload PPT (PDF format)", type=["pdf"])
+ppt_file = st.file_uploader("Upload PPTX (for classification)", type=["pptx"])
+pdf_file = st.file_uploader("Upload PDF (for display)", type=["pdf"])
 
 slides_data = []
 image_list = []
 
 # =========================================================
-# ✅ PDF → 图片（自动拆页）
+# ✅ PDF → 图片
 # =========================================================
 def pdf_to_images(pdf_file):
 
@@ -33,13 +34,11 @@ def pdf_to_images(pdf_file):
 
     pdf = fitz.open(tmp_path)
 
-    for page_num in range(len(pdf)):
-        page = pdf[page_num]
+    for i in range(len(pdf)):
+        page = pdf[i]
         pix = page.get_pixmap()
-
-        img_path = f"/tmp/page_{page_num+1}.png"
+        img_path = f"/tmp/page_{i+1}.png"
         pix.save(img_path)
-
         images.append(img_path)
 
     return images
@@ -49,8 +48,6 @@ def pdf_to_images(pdf_file):
 # =========================================================
 def clean_text(text):
     text = text.lower()
-    text = re.sub(r'[\x00-\x1F\x7F]', ' ', text)
-    text = text.replace("\n", " ").replace("\r", " ")
     text = re.sub(r'\s+', ' ', text)
     return text
 
@@ -88,33 +85,36 @@ def classify(text):
         return "Others", "Unknown Product"
 
 # =========================================================
-# ✅ 处理 PDF
+# ✅ 处理逻辑（必须两个文件都上传）
 # =========================================================
-if uploaded_pdf:
+if ppt_file and pdf_file:
 
-    # ✅ 1. 拆 PDF → 图片
-    image_list = pdf_to_images(uploaded_pdf)
+    # ✅ 1️⃣ 解析 PPT（分类用）
+    prs = Presentation(ppt_file)
 
-    # ✅ 2. 提取文本（用 pdf metadata）
-    # 注意：PDF没有结构文本，简化为 page-level placeholder
-    for i in range(len(image_list)):
+    for i, slide in enumerate(prs.slides):
+
+        text_content = ""
+
+        for shape in slide.shapes:
+            if hasattr(shape, "text"):
+                text_content += shape.text + " "
+
         slides_data.append({
             "page": i + 1,
-            "text": f"page_{i+1}"  # 用占位符（分类靠你原逻辑可扩展）
+            "text": text_content
         })
 
-    # =====================================================
-    # ✅ 自动分类（这里是关键限制说明）
-    # =====================================================
+    # ✅ 2️⃣ PDF 拆图（展示用）
+    image_list = pdf_to_images(pdf_file)
+
+    # ✅ 3️⃣ 分类
     grouped = {}
 
     for slide in slides_data:
 
-        # ⚠️ 由于 PDF 无结构文本，这里建议未来：
-        # 👉 可结合 OCR / 或继续使用 PPT 上传
-
-        main = "Others"
-        sub = "Slides"
+        cleaned = clean_text(slide["text"])
+        main, sub = classify(cleaned)
 
         if main not in grouped:
             grouped[main] = {}
@@ -124,19 +124,30 @@ if uploaded_pdf:
 
         grouped[main][sub].append(slide)
 
-    # =====================================================
-    # ✅ 展示
-    # =====================================================
-    st.subheader("📂 All Slides")
+    # ✅ 顺序
+    ordered_main = ["Yield", "Option", "Others"]
 
-    with st.expander(f"📁 Slides ({len(image_list)})"):
+    # ✅ 4️⃣ 展示
+    for main_category in ordered_main:
 
-        for i, slide in enumerate(slides_data):
+        if main_category not in grouped:
+            continue
 
-            st.markdown(f"**📄 Page {slide['page']}**")
+        st.subheader(f"📂 {main_category}")
 
-            if i < len(image_list):
-                st.image(image_list[i], use_container_width=True)
-            else:
-                st.warning("图片缺失")
+        for sub_category in grouped[main_category]:
+
+            slides_list = grouped[main_category][sub_category]
+
+            with st.expander(f"📁 {sub_category} ({len(slides_list)})"):
+
+                for slide in slides_list:
+
+                    page_num = slide["page"]
+                    st.markdown(f"**📄 Page {page_num}**")
+
+                    if page_num - 1 < len(image_list):
+                        st.image(image_list[page_num - 1], use_container_width=True)
+                    else:
+                        st.warning("缺少对应PDF页面")
 
