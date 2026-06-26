@@ -12,7 +12,7 @@ st.title("📊 Investment Product Explorer")
 st.caption("PPT分类 + PDF原页面展示（完全自动）")
 
 # =========================================================
-# ✅ 使用说明（你新增要求）
+# ✅ 使用说明
 # =========================================================
 st.info("""
 📌 使用说明：
@@ -34,7 +34,7 @@ slides_data = []
 image_list = []
 
 # =========================================================
-# ✅ PDF → 图片
+# ✅ PDF 转图片
 # =========================================================
 def pdf_to_images(pdf_file):
 
@@ -64,7 +64,7 @@ def clean_text(text):
     return text
 
 # =========================================================
-# ✅ 分类逻辑（已修改 Unknown）
+# ✅ 分类逻辑
 # =========================================================
 def classify(text):
     t = text
@@ -94,7 +94,6 @@ def classify(text):
     elif "stable note" in t:
         return "Others", "Stable Note"
     else:
-        # ✅ 修改点：Unknown 单独分类
         return "Unknown Information", "Unknown"
 
 # =========================================================
@@ -102,7 +101,9 @@ def classify(text):
 # =========================================================
 if ppt_file and pdf_file:
 
-    # ✅ 1️⃣ PPT解析（分类）
+    # -------------------------------------------
+    # ✅ 1️⃣ 解析 PPT
+    # -------------------------------------------
     prs = Presentation(ppt_file)
 
     for i, slide in enumerate(prs.slides):
@@ -118,12 +119,14 @@ if ppt_file and pdf_file:
             "text": text_content
         })
 
-    # ✅ 2️⃣ PDF拆页
+    # -------------------------------------------
+    # ✅ 2️⃣ PDF 转图片
+    # -------------------------------------------
     image_list = pdf_to_images(pdf_file)
 
-    # =====================================================
-    # ✅ 页数校验（你要求的）
-    # =====================================================
+    # -------------------------------------------
+    # ✅ 页数校验
+    # -------------------------------------------
     if len(slides_data) != len(image_list):
 
         st.error(f"""
@@ -137,9 +140,9 @@ PDF 页数：{len(image_list)}
 
         st.stop()
 
-    # =====================================================
-    # ✅ 分类构建（已修复 bug）
-    # =====================================================
+    # -------------------------------------------
+    # ✅ 3️⃣ 分类构建
+    # -------------------------------------------
     grouped = {}
 
     for slide in slides_data:
@@ -155,9 +158,9 @@ PDF 页数：{len(image_list)}
 
         grouped[main][sub].append(slide)
 
-    # =====================================================
-    # ✅ 展示顺序（Unknown 放最后）
-    # =====================================================
+    # -------------------------------------------
+    # ✅ 4️⃣ 展示
+    # -------------------------------------------
     ordered_main = ["Yield", "Option", "Others", "Unknown Information"]
 
     for main_category in ordered_main:
@@ -165,22 +168,23 @@ PDF 页数：{len(image_list)}
         if main_category not in grouped:
             continue
 
-        # ✅ 特殊处理 Unknown（只显示一层）
+        # ✅ Unknown Information（✅一层折叠）
         if main_category == "Unknown Information":
 
             unknown_list = grouped[main_category]["Unknown"]
 
-            st.subheader(f"📂 Unknown Information ({len(unknown_list)})")
+            with st.expander(f"📂 Unknown Information ({len(unknown_list)})"):
 
-            for slide in unknown_list:
-                page_num = slide["page"]
+                for slide in unknown_list:
 
-                st.markdown(f"**📄 Page {page_num}**")
-                _ = st.image(image_list[page_num - 1], use_container_width=True)
+                    page_num = slide["page"]
+
+                    st.markdown(f"**📄 Page {page_num}**")
+                    _ = st.image(image_list[page_num - 1], use_container_width=True)
 
             continue
 
-        # ✅ 正常分类
+        # ✅ 普通分类
         st.subheader(f"📂 {main_category}")
 
         for sub_category, slides_list in grouped[main_category].items():
@@ -192,5 +196,4 @@ PDF 页数：{len(image_list)}
                     page_num = slide["page"]
 
                     st.markdown(f"**📄 Page {page_num}**")
-
                     _ = st.image(image_list[page_num - 1], use_container_width=True)
