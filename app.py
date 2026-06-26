@@ -163,4 +163,3 @@ if ppt_file and pdf_file:
                         _ = st.image(image_list[page_num - 1], use_container_width=True)
                     else:
                         st.error(f"❌ 缺少 PDF 第 {page_num} 页")
-
