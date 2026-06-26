@@ -5,11 +5,16 @@ import fitz  # PyMuPDF
 import tempfile
 import re
 
+# ✅ PDF生成
+from reportlab.platypus import SimpleDocTemplate, Image as RLImage, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.pagesizes import letter
+
 # =========================================================
 # ✅ 页面标题
 # =========================================================
 st.title("📊 Investment Product Explorer")
-st.caption("PPT分类 + PDF原页面展示（完全自动）")
+st.caption("PPT分类 + PDF原页面展示 + 自动生成报告")
 
 # =========================================================
 # ✅ 使用说明
@@ -19,22 +24,22 @@ st.info("""
 请上传【同一份文件】的两个版本：
 
 1️⃣ PPTX（用于分类）  
-2️⃣ PDF（用于页面展示）
+2️⃣ PDF（用于展示）
 
-⚠️ 必须保证两者页数完全一致，否则无法匹配
+⚠️ 页数必须一致
 """)
 
 # =========================================================
 # ✅ 上传文件
 # =========================================================
-ppt_file = st.file_uploader("Upload PPTX (for classification)", type=["pptx"])
-pdf_file = st.file_uploader("Upload PDF (for display)", type=["pdf"])
+ppt_file = st.file_uploader("Upload PPTX", type=["pptx"])
+pdf_file = st.file_uploader("Upload PDF", type=["pdf"])
 
 slides_data = []
 image_list = []
 
 # =========================================================
-# ✅ PDF 转图片
+# ✅ PDF → 图片
 # =========================================================
 def pdf_to_images(pdf_file):
 
@@ -97,13 +102,70 @@ def classify(text):
         return "Unknown Information", "Unknown"
 
 # =========================================================
+# ✅ 生成最终 PDF 报告
+# =========================================================
+def generate_report_pdf(grouped, image_list):
+
+    output_path = "/tmp/final_report.pdf"
+
+    doc = SimpleDocTemplate(output_path, pagesize=letter)
+    styles = getSampleStyleSheet()
+    content = []
+
+    content.append(Paragraph("Weekly Product Report", styles["Title"]))
+    content.append(Spacer(1, 20))
+
+    ordered_main = ["Yield", "Option", "Others", "Unknown Information"]
+
+    for main_category in ordered_main:
+
+        if main_category not in grouped:
+            continue
+
+        content.append(Paragraph(main_category, styles["Heading1"]))
+        content.append(Spacer(1, 10))
+
+        # ✅ Unknown 单层
+        if main_category == "Unknown Information":
+
+            slides_list = grouped[main_category]["Unknown"]
+
+            for slide in slides_list:
+                page_num = slide["page"]
+
+                content.append(Paragraph(f"Page {page_num}", styles["Heading3"]))
+
+                img_path = image_list[page_num - 1]
+                content.append(RLImage(img_path, width=500, height=350))
+                content.append(Spacer(1, 20))
+
+            continue
+
+        # ✅ 普通分类
+        for sub_category, slides_list in grouped[main_category].items():
+
+            content.append(Paragraph(sub_category, styles["Heading2"]))
+            content.append(Spacer(1, 10))
+
+            for slide in slides_list:
+                page_num = slide["page"]
+
+                content.append(Paragraph(f"Page {page_num}", styles["Heading3"]))
+
+                img_path = image_list[page_num - 1]
+                content.append(RLImage(img_path, width=500, height=350))
+                content.append(Spacer(1, 20))
+
+    doc.build(content)
+
+    return output_path
+
+# =========================================================
 # ✅ 主逻辑
 # =========================================================
 if ppt_file and pdf_file:
 
-    # -------------------------------------------
-    # ✅ 1️⃣ 解析 PPT
-    # -------------------------------------------
+    # ✅ PPT解析
     prs = Presentation(ppt_file)
 
     for i, slide in enumerate(prs.slides):
@@ -119,14 +181,10 @@ if ppt_file and pdf_file:
             "text": text_content
         })
 
-    # -------------------------------------------
-    # ✅ 2️⃣ PDF 转图片
-    # -------------------------------------------
+    # ✅ PDF拆页
     image_list = pdf_to_images(pdf_file)
 
-    # -------------------------------------------
     # ✅ 页数校验
-    # -------------------------------------------
     if len(slides_data) != len(image_list):
 
         st.error(f"""
@@ -135,14 +193,12 @@ if ppt_file and pdf_file:
 PPT 页数：{len(slides_data)}  
 PDF 页数：{len(image_list)}
 
-👉 请使用【同一文件】导出的 PDF
+👉 请使用同一文件导出
 """)
 
         st.stop()
 
-    # -------------------------------------------
-    # ✅ 3️⃣ 分类构建
-    # -------------------------------------------
+    # ✅ 分类
     grouped = {}
 
     for slide in slides_data:
@@ -158,9 +214,7 @@ PDF 页数：{len(image_list)}
 
         grouped[main][sub].append(slide)
 
-    # -------------------------------------------
-    # ✅ 4️⃣ 展示
-    # -------------------------------------------
+    # ✅ 展示
     ordered_main = ["Yield", "Option", "Others", "Unknown Information"]
 
     for main_category in ordered_main:
@@ -168,7 +222,6 @@ PDF 页数：{len(image_list)}
         if main_category not in grouped:
             continue
 
-        # ✅ Unknown Information（✅一层折叠）
         if main_category == "Unknown Information":
 
             unknown_list = grouped[main_category]["Unknown"]
@@ -176,15 +229,12 @@ PDF 页数：{len(image_list)}
             with st.expander(f"📂 Unknown Information ({len(unknown_list)})"):
 
                 for slide in unknown_list:
-
                     page_num = slide["page"]
-
                     st.markdown(f"**📄 Page {page_num}**")
                     _ = st.image(image_list[page_num - 1], use_container_width=True)
 
             continue
 
-        # ✅ 普通分类
         st.subheader(f"📂 {main_category}")
 
         for sub_category, slides_list in grouped[main_category].items():
@@ -192,8 +242,19 @@ PDF 页数：{len(image_list)}
             with st.expander(f"📁 {sub_category} ({len(slides_list)})"):
 
                 for slide in slides_list:
-
                     page_num = slide["page"]
-
                     st.markdown(f"**📄 Page {page_num}**")
                     _ = st.image(image_list[page_num - 1], use_container_width=True)
+
+    # ✅ 生成 PDF 报告
+    report_path = generate_report_pdf(grouped, image_list)
+
+    st.success("✅ 分类报告 PDF 已生成")
+
+    with open(report_path, "rb") as f:
+        st.download_button(
+            label="📥 下载完整分类报告 PDF",
+            data=f,
+            file_name="weekly_product_report.pdf"
+        )
+``
