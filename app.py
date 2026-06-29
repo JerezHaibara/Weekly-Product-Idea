@@ -254,8 +254,10 @@ if ppt_file and pdf_file:
 
         # ✅ 主类直接 flatten
         if sub is None:
-            if "all" not in groupedgrouped[main]["all"] = []
+            if "all" not in grouped[main]:
+                grouped[main]["all"] = []
             grouped[main]["all"].append(slide)
+
 
         else:
             if sub not in groupedgrouped[main][sub] = []
