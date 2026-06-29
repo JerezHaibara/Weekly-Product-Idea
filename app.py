@@ -6,15 +6,17 @@ import tempfile
 import re
 from datetime import datetime
 
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, PageBreak
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, PageBreak, Table
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+
+PAGE_WIDTH, PAGE_HEIGHT = A4
 
 # =========================================================
 # 页面
 # =========================================================
 st.title("📊 Investment Product Explorer V3")
-st.caption("Clean Classification + PDF Export")
+st.caption("Professional Classification + PDF Output")
 
 report_date = st.date_input("📅 报告日期", value=datetime.today())
 
@@ -36,6 +38,7 @@ image_list = []
 # PDF → 图片
 # =========================================================
 def pdf_to_images(pdf_file):
+
     images = []
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
@@ -54,17 +57,16 @@ def pdf_to_images(pdf_file):
     return images
 
 # =========================================================
-# 文本清洗
+# 清洗
 # =========================================================
 def clean_text(text):
     return re.sub(r"\s+", " ", text.lower())
 
 # =========================================================
-# 分类逻辑（V3）
+# 分类逻辑
 # =========================================================
 def classify(text):
 
-    # ✅ DCI 优先
     if "dci" in text:
         if "dual" in text and "range accrual" in text:
             return "DCI", "Dual Range DCI"
@@ -73,7 +75,6 @@ def classify(text):
         else:
             return "DCI", "Vanilla DCI"
 
-    # ✅ Accrual Note
     elif "range accrual" in text:
         if "dual" in text:
             return "Accrual Note", "Dual Accrual Note"
@@ -89,10 +90,9 @@ def classify(text):
     elif "aq" in text:
         return "AQ", "Accumulator"
 
-    elif "fund" in text or "bluebay" in text or "singularity" in text:
+    elif "fund" in text:
         return "Fund", "Fund"
 
-    # Others
     elif "twinwin" in text:
         return "Others", "Twinwin"
 
@@ -118,11 +118,11 @@ def classify(text):
         return "Others", "Unknown"
 
 # =========================================================
-# PDF生成
+# ✅ PDF（6图/页 + 分类分页）
 # =========================================================
 def generate_pdf(grouped, image_list):
 
-    output_path = "/tmp/report.pdf"
+    output_path = "/tmp/final_report.pdf"
     doc = SimpleDocTemplate(output_path, pagesize=A4)
     styles = getSampleStyleSheet()
 
@@ -138,67 +138,91 @@ def generate_pdf(grouped, image_list):
         "Others"
     ]
 
-    # 封面
+    # ✅ 右上角分类
+    def draw_header(canvas, doc):
+        canvas.setFont("Helvetica", 10)
+        if hasattr(doc, "current_category"):
+            canvas.drawRightString(
+                PAGE_WIDTH - 40,
+                PAGE_HEIGHT - 30,
+                doc.current_category
+            )
+
+    # ✅ 封面
     content.append(Paragraph("Investment Product Report", styles["Title"]))
     content.append(Spacer(1, 40))
     content.append(Paragraph(str(report_date), styles["Normal"]))
     content.append(PageBreak())
 
-    # 内容
     for main in ordered_main:
 
         if main not in grouped:
             continue
 
-        content.append(Paragraph(main, styles["Heading1"]))
-        content.append(Spacer(1, 10))
+        slides = []
 
-        # Others
+        # ✅ 展平 Others
         if main == "Others":
-
-            sorted_sub = sorted(
-                grouped[main].keys(),
-                key=lambda x: (x == "Unknown", x)
-            )
-
-            for sub in sorted_sub:
-
-                content.append(Paragraph(sub, styles["Heading2"]))
-
-                for slide in grouped[main][sub]:
-                    page_num = slide["page"]
-                    img = image_list[page_num - 1]
-
-                    content.append(Paragraph(f"Page {page_num}", styles["Normal"]))
-                    content.append(RLImage(img, width=450, height=300))
-                    content.append(Spacer(1, 10))
-
-        else:
-
             for sub in grouped[main].values():
-                for slide in sub:
-                    page_num = slide["page"]
-                    img = image_list[page_num - 1]
+                slides.extend(sub)
+        else:
+            for sub in grouped[main].values():
+                slides.extend(sub)
 
-                    content.append(Paragraph(f"Page {page_num}", styles["Normal"]))
-                    content.append(RLImage(img, width=450, height=300))
-                    content.append(Spacer(1, 10))
-
+        # ✅ 分类新起一页
         content.append(PageBreak())
 
-    doc.build(content)
+        # ✅ 每6张一页
+        for i in range(0, len(slides), 6):
+
+            batch = slides[i:i+6]
+
+            table_data = []
+            row = []
+
+            for slide in batch:
+
+                page_num = slide["page"]
+                img_path = image_list[page_num - 1]
+
+                cell = [
+                    Paragraph(f"<b>Page {page_num}</b>", styles["Normal"]),
+                    RLImage(img_path, width=220, height=150)
+                ]
+
+                row.append(cell)
+
+                if len(row) == 2:
+                    table_data.append(row)
+                    row = []
+
+            if row:
+                table_data.append(row)
+
+            table = Table(table_data, colWidths=[260, 260])
+            content.append(table)
+            content.append(Spacer(1, 10))
+
+            # ✅ 设置当前分类用于header
+            doc.current_category = main
+
+            content.append(PageBreak())
+
+    doc.build(content, onFirstPage=draw_header, onLaterPages=draw_header)
 
     return output_path
 
 # =========================================================
-# 主流程
+# 主逻辑
 # =========================================================
 if ppt_file and pdf_file:
 
     prs = Presentation(ppt_file)
 
     for i, slide in enumerate(prs.slides):
+
         text_content = ""
+
         for shape in slide.shapes:
             if hasattr(shape, "text"):
                 text_content += shape.text + " "
@@ -229,7 +253,7 @@ if ppt_file and pdf_file:
 
         grouped[main][sub].append(slide)
 
-    # UI
+    # ✅ UI展示
     ordered_main = [
         "FCN",
         "Accrual Note",
@@ -274,12 +298,8 @@ if ppt_file and pdf_file:
                     st.markdown(f"**Page {s['page']}**")
                     st.image(image_list[s["page"] - 1])
 
-    # PDF按钮
+    # ✅ PDF下载
     pdf_path = generate_pdf(grouped, image_list)
 
     with open(pdf_path, "rb") as f:
-        st.download_button(
-            "📄 下载PDF报告",
-            f,
-            "investment_report.pdf"
-        )
+        st.download_button("📄 下载PDF报告", f, "investment_report.pdf")
