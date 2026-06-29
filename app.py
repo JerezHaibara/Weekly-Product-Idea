@@ -14,7 +14,7 @@ from reportlab.lib.pagesizes import A4
 # 页面
 # =========================================================
 st.title("📊 Investment Product Explorer V3")
-st.caption("Clean Classification + Exportable Report")
+st.caption("Clean Classification + PDF Export")
 
 report_date = st.date_input("📅 报告日期", value=datetime.today())
 
@@ -36,7 +36,6 @@ image_list = []
 # PDF → 图片
 # =========================================================
 def pdf_to_images(pdf_file):
-
     images = []
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
@@ -55,37 +54,32 @@ def pdf_to_images(pdf_file):
     return images
 
 # =========================================================
-# 文本处理
+# 文本清洗
 # =========================================================
 def clean_text(text):
     return re.sub(r"\s+", " ", text.lower())
 
 # =========================================================
-# ✅ V3 分类逻辑（最终稳定版）
+# 分类逻辑（V3）
 # =========================================================
 def classify(text):
 
-    # ✅ DCI优先（核心规则）
+    # ✅ DCI 优先
     if "dci" in text:
-
         if "dual" in text and "range accrual" in text:
             return "DCI", "Dual Range DCI"
-
         elif "range accrual" in text:
             return "DCI", "Range Accrual DCI"
-
         else:
             return "DCI", "Vanilla DCI"
 
-    # ✅ Accrual Note（纯）
+    # ✅ Accrual Note
     elif "range accrual" in text:
-
         if "dual" in text:
             return "Accrual Note", "Dual Accrual Note"
         else:
             return "Accrual Note", "Accrual Note"
 
-    # ✅ 主类
     elif "fcn" in text:
         return "FCN", "FCN"
 
@@ -98,7 +92,7 @@ def classify(text):
     elif "fund" in text or "bluebay" in text or "singularity" in text:
         return "Fund", "Fund"
 
-    # ✅ Others
+    # Others
     elif "twinwin" in text:
         return "Others", "Twinwin"
 
@@ -124,14 +118,14 @@ def classify(text):
         return "Others", "Unknown"
 
 # =========================================================
-# ✅ PDF（带目录）
+# PDF生成
 # =========================================================
-def generate_toc_pdf(grouped, image_list):
+def generate_pdf(grouped, image_list):
 
-    output_path = "/tmp/report_v3.pdf"
-
+    output_path = "/tmp/report.pdf"
     doc = SimpleDocTemplate(output_path, pagesize=A4)
     styles = getSampleStyleSheet()
+
     content = []
 
     ordered_main = [
@@ -144,43 +138,22 @@ def generate_toc_pdf(grouped, image_list):
         "Others"
     ]
 
-    # ✅ 封面
+    # 封面
     content.append(Paragraph("Investment Product Report", styles["Title"]))
-    content.append(Spacer(1, 50))
+    content.append(Spacer(1, 40))
     content.append(Paragraph(str(report_date), styles["Normal"]))
     content.append(PageBreak())
 
-    # ✅ 目录
-    content.append(Paragraph("Table of Contents", styles["Heading1"]))
-    content.append(Spacer(1, 20))
-
-    page_index = 2
-    page_map = {}
-
-    for main in ordered_main:
-        if main in grouped:
-            page_map[main] = page_index
-            page_index += sum(len(v) for v in grouped[main].values()) + 1
-
-    for main in ordered_main:
-        if main in page_map:
-            content.append(
-                Paragraph(f"{main} ...... Page {page_map[main]}", styles["Normal"])
-            )
-            content.append(Spacer(1, 8))
-
-    content.append(PageBreak())
-
-    # ✅ 内容
+    # 内容
     for main in ordered_main:
 
         if main not in grouped:
             continue
 
-        content.append(Paragraph(f"<b>{main}</b>", styles["Heading1"]))
+        content.append(Paragraph(main, styles["Heading1"]))
         content.append(Spacer(1, 10))
 
-        # Others（有子类）
+        # Others
         if main == "Others":
 
             sorted_sub = sorted(
@@ -197,8 +170,8 @@ def generate_toc_pdf(grouped, image_list):
                     img = image_list[page_num - 1]
 
                     content.append(Paragraph(f"Page {page_num}", styles["Normal"]))
-                    content.append(RLImage(img, width=400, height=300))
-                    content.append(Spacer(1, 12))
+                    content.append(RLImage(img, width=450, height=300))
+                    content.append(Spacer(1, 10))
 
         else:
 
@@ -208,8 +181,8 @@ def generate_toc_pdf(grouped, image_list):
                     img = image_list[page_num - 1]
 
                     content.append(Paragraph(f"Page {page_num}", styles["Normal"]))
-                    content.append(RLImage(img, width=400, height=300))
-                    content.append(Spacer(1, 12))
+                    content.append(RLImage(img, width=450, height=300))
+                    content.append(Spacer(1, 10))
 
         content.append(PageBreak())
 
@@ -218,16 +191,14 @@ def generate_toc_pdf(grouped, image_list):
     return output_path
 
 # =========================================================
-# 主逻辑
+# 主流程
 # =========================================================
 if ppt_file and pdf_file:
 
     prs = Presentation(ppt_file)
 
     for i, slide in enumerate(prs.slides):
-
         text_content = ""
-
         for shape in slide.shapes:
             if hasattr(shape, "text"):
                 text_content += shape.text + " "
@@ -253,12 +224,12 @@ if ppt_file and pdf_file:
         if main not in grouped:
             grouped[main] = {}
 
-        if sub not in grouped[grouped[main]]:
+        if sub not in grouped[main]:
             grouped[main][sub] = []
 
         grouped[main][sub].append(slide)
 
-    # ✅ UI
+    # UI
     ordered_main = [
         "FCN",
         "Accrual Note",
@@ -287,27 +258,28 @@ if ppt_file and pdf_file:
 
                 for sub in sorted_sub:
 
-                    slides = grouped[main][sub]
+                    with st.expander(f"{sub} ({len(grouped[main][sub])})"):
 
-                    with st.expander(f"{sub} ({len(slides)})"):
-
-                        for s in slides:
+                        for s in grouped[main][sub]:
                             st.markdown(f"**Page {s['page']}**")
                             st.image(image_list[s["page"] - 1])
 
             else:
 
-                all_slides = []
-                for v in grouped[main].values():
-                    all_slides.extend(v)
+                slides = []
+                for sub_list in grouped[main].values():
+                    slides.extend(sub_list)
 
-                for s in all_slides:
+                for s in slides:
                     st.markdown(f"**Page {s['page']}**")
                     st.image(image_list[s["page"] - 1])
 
-    # ✅ PDF导出
-    pdf_path = generate_toc_pdf(grouped, image_list)
+    # PDF按钮
+    pdf_path = generate_pdf(grouped, image_list)
 
     with open(pdf_path, "rb") as f:
-        st.download_button("📄 下载PDF报告（带目录）", f, "report.pdf")
-
+        st.download_button(
+            "📄 下载PDF报告",
+            f,
+            "investment_report.pdf"
+        )
