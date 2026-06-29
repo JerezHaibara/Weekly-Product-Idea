@@ -15,9 +15,21 @@ from reportlab.lib.styles import getSampleStyleSheet
 
 
 # =========================================================
-# UI
+# ✅ UI（带说明 ✅）
 # =========================================================
 st.title("📊 Investment Product Explorer V4 FINAL")
+
+st.markdown("""
+### ⚠️ IMPORTANT 使用说明
+
+- PPTX 和 PDF **必须来自同一份文件**
+- PPTX 用于：**文本识别 & 分类**
+- PDF 用于：**图像展示 & 报告生成**
+
+❗ 如果两者不一致：
+- 分类会错误  
+- 图片会错位  
+""")
 
 report_date = st.date_input("📅 报告日期", value=datetime.today())
 
@@ -65,7 +77,6 @@ def classify(raw_text):
 
     text = clean_text(raw_text)
 
-    # ✅ Unclassified
     if len(text.strip()) < 15:
         return "Unclassified", "Empty"
 
@@ -101,7 +112,7 @@ def classify(raw_text):
 
 
 # =========================================================
-# PDF生成
+# PDF生成（不改结构 ✅）
 # =========================================================
 def generate_pdf(grouped, image_list):
 
@@ -147,13 +158,12 @@ def generate_pdf(grouped, image_list):
     story.append(PageBreak())
 
     # =========================
-    # ✅ 分类内容
+    # 分类内容
     # =========================
     for main in ordered_main:
 
         sub_dict = grouped[main]
 
-        # ✅ flatten（主类直接用）
         if main in ["FCN", "Accrual Note", "DCI", "Sharkfin", "AQ", "Fund"]:
             slides = sub_dict["all"]
         else:
@@ -163,11 +173,9 @@ def generate_pdf(grouped, image_list):
 
         count = len(slides)
 
-        # ✅ 标题页
         story.append(Spacer(1, 200))
         story.append(Paragraph(f"<b>{main} ({count})</b>", styles["Title"]))
 
-        # ✅ Others显示子分类
         if main == "Others":
 
             story.append(Spacer(1, 20))
@@ -184,7 +192,6 @@ def generate_pdf(grouped, image_list):
 
         story.append(PageBreak())
 
-        # ✅ 图片页
         for i in range(0, len(slides), 6):
 
             batch = slides[i:i+6]
@@ -222,7 +229,7 @@ def generate_pdf(grouped, image_list):
 
 
 # =========================================================
-# 主逻辑
+# 主逻辑（完全不改 ✅）
 # =========================================================
 if ppt_file and pdf_file:
 
@@ -244,7 +251,6 @@ if ppt_file and pdf_file:
 
     grouped = {}
 
-    # ✅ 构建分类
     for slide in slides_data:
 
         main, sub = classify(slide["text"])
@@ -252,18 +258,15 @@ if ppt_file and pdf_file:
         if main not in grouped:
             grouped[main] = {}
 
-        # ✅ 主类直接 flatten
         if sub is None:
             if "all" not in grouped[main]:
                 grouped[main]["all"] = []
             grouped[main]["all"].append(slide)
-
         else:
             if sub not in grouped[main]:
                 grouped[main][sub] = []
             grouped[main][sub].append(slide)
 
-    # ✅ 排序
     priority_map = {
         "FCN": 1,
         "Accrual Note": 2,
@@ -278,7 +281,7 @@ if ppt_file and pdf_file:
     ordered_main = sorted(grouped.keys(), key=lambda x: priority_map.get(x, 999))
 
     # =========================
-    # ✅ UI
+    # UI
     # =========================
     for main in ordered_main:
 
@@ -306,7 +309,7 @@ if ppt_file and pdf_file:
                             st.image(image_list[s["page"] - 1])
 
     # =========================
-    # ✅ PDF下载
+    # PDF下载
     # =========================
     pdf_path = generate_pdf(grouped, image_list)
 
