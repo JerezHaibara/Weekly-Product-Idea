@@ -16,7 +16,8 @@ from reportlab.lib.styles import getSampleStyleSheet
 # =========================================================
 # UI
 # =========================================================
-st.title("📊 Investment Product Explorer V3 FINAL")
+st.title("📊 Investment Product Explorer V4")
+
 report_date = st.date_input("📅 报告日期", value=datetime.today())
 
 ppt_file = st.file_uploader("Upload PPTX", type=["pptx"])
@@ -54,13 +55,13 @@ def clean_text(text):
     return re.sub(r"\s+", " ", text.lower())
 
 # =========================================================
-# 分类（增强版）
+# 分类
 # =========================================================
 def classify(raw_text):
 
     text = clean_text(raw_text)
 
-    # ✅ Unclassified
+    # ✅ Unclassified（空页 / PPT切割页）
     if len(text.strip()) < 15:
         return "Unclassified", "Empty"
 
@@ -95,7 +96,7 @@ def classify(raw_text):
         return "Others", "Unknown"
 
 # =========================================================
-# ✅ PDF生成（终极版）
+# PDF 生成
 # =========================================================
 def generate_pdf(grouped, image_list):
 
@@ -114,7 +115,6 @@ def generate_pdf(grouped, image_list):
 
     story = []
 
-    # 排序
     ordered_main = [
         "FCN",
         "Accrual Note",
@@ -126,9 +126,9 @@ def generate_pdf(grouped, image_list):
         "Unclassified"
     ]
 
-    # =====================================================
+    # =========================
     # ✅ 目录
-    # =====================================================
+    # =========================
     story.append(Paragraph("Table of Contents", styles["Title"]))
     story.append(Spacer(1, 20))
 
@@ -140,9 +140,9 @@ def generate_pdf(grouped, image_list):
 
     story.append(PageBreak())
 
-    # =====================================================
-    # ✅ 内容
-    # =====================================================
+    # =========================
+    # ✅ 分类内容
+    # =========================
     for main in ordered_main:
 
         if main not in grouped:
@@ -154,13 +154,11 @@ def generate_pdf(grouped, image_list):
 
         count = len(slides)
 
-        # =========================
         # ✅ 分类标题页
-        # =========================
         story.append(Spacer(1, 200))
         story.append(Paragraph(f"<b>{main} ({count})</b>", styles["Title"]))
 
-        # ✅ Others加子分类
+        # ✅ Others子分类
         if main == "Others":
 
             story.append(Spacer(1, 20))
@@ -172,9 +170,7 @@ def generate_pdf(grouped, image_list):
 
         story.append(PageBreak())
 
-        # =========================
         # ✅ 图片页
-        # =========================
         for i in range(0, len(slides), 6):
 
             batch = slides[i:i+6]
@@ -184,15 +180,14 @@ def generate_pdf(grouped, image_list):
             for slide in batch:
 
                 page_num = slide["page"]
+
                 img = RLImage(image_list[page_num - 1])
                 img._restrictSize(260, 180)
 
-                cell = [
+                row.append([
                     Paragraph(f"<font size=7>Page {page_num}</font>", styles["Normal"]),
                     img
-                ]
-
-                row.append(cell)
+                ])
 
                 if len(row) == 2:
                     table_data.append(row)
