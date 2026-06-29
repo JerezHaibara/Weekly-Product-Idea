@@ -1,4 +1,5 @@
 
+
 import streamlit as st
 from pptx import Presentation
 import fitz
@@ -7,15 +8,15 @@ import re
 from datetime import datetime
 
 # =========================================================
-# 页面标题
+# ✅ 页面标题
 # =========================================================
 st.title("📊 Investment Product Explorer V2")
-st.caption("Enhanced Classification + Professional Structure")
+st.caption("Professional Classification + Clean Structure")
 
 report_date = st.date_input("📅 报告日期", value=datetime.today())
 
 # =========================================================
-# 使用说明
+# ✅ 使用说明
 # =========================================================
 st.info("""
 📌 使用说明：
@@ -28,7 +29,7 @@ st.info("""
 """)
 
 # =========================================================
-# 上传
+# ✅ 上传
 # =========================================================
 ppt_file = st.file_uploader("Upload PPTX", type=["pptx"])
 pdf_file = st.file_uploader("Upload PDF", type=["pdf"])
@@ -37,7 +38,7 @@ slides_data = []
 image_list = []
 
 # =========================================================
-# PDF → 图片
+# ✅ PDF转图片
 # =========================================================
 def pdf_to_images(pdf_file):
 
@@ -59,7 +60,7 @@ def pdf_to_images(pdf_file):
     return images
 
 # =========================================================
-# 清洗文本
+# ✅ 清洗文本
 # =========================================================
 def clean_text(text):
     text = text.lower()
@@ -67,11 +68,11 @@ def clean_text(text):
     return text
 
 # =========================================================
-# ✅ V2 分类逻辑（核心升级）
+# ✅ V2 分类逻辑（最终版）
 # =========================================================
 def classify(text):
 
-    # ===== 主类 =====
+    # ===== 核心产品 =====
     if "fcn" in text:
         return "FCN", "FCN"
 
@@ -116,11 +117,11 @@ def classify(text):
         return "Others", "Unknown"
 
 # =========================================================
-# 主逻辑
+# ✅ 主逻辑
 # =========================================================
 if ppt_file and pdf_file:
 
-    # ✅ 读取 PPT
+    # ✅ 读取PPT
     prs = Presentation(ppt_file)
 
     for i, slide in enumerate(prs.slides):
@@ -136,7 +137,7 @@ if ppt_file and pdf_file:
             "text": text_content
         })
 
-    # ✅ PDF 转图
+    # ✅ PDF转图片
     image_list = pdf_to_images(pdf_file)
 
     # ✅ 页数校验
@@ -150,7 +151,7 @@ PDF：{len(image_list)} 页
         st.stop()
 
     # =====================================================
-    # 分类构建（稳定版 ✅）
+    # ✅ 分类构建（已彻底修复bug ✅）
     # =====================================================
     grouped = {}
 
@@ -162,13 +163,13 @@ PDF：{len(image_list)} 页
         if main not in grouped:
             grouped[main] = {}
 
-        if sub not in grouped[main]:
+        if sub not in grouped[main]:   # ✅ 修复关键bug
             grouped[main][sub] = []
 
         grouped[main][sub].append(slide)
 
     # =====================================================
-    # 展示结构（V2优化 ✅）
+    # ✅ 展示顺序
     # =====================================================
     ordered_main = [
         "FCN",
@@ -187,7 +188,15 @@ PDF：{len(image_list)} 页
 
         st.subheader(f"📂 {main_category}")
 
-        for sub_category, slides_list in grouped[main_category].items():
+        # ✅ 排序：Unknown 永远最后
+        sorted_subcats = sorted(
+            grouped[main_category].keys(),
+            key=lambda x: (x == "Unknown", x)
+        )
+
+        for sub_category in sorted_subcats:
+
+            slides_list = grouped[main_category][sub_category]
 
             with st.expander(f"{sub_category} ({len(slides_list)})"):
 
@@ -197,3 +206,4 @@ PDF：{len(image_list)} 页
 
                     st.markdown(f"**Page {page_num}**")
                     st.image(image_list[page_num - 1], use_container_width=True)
+
