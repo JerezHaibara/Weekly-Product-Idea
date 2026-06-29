@@ -13,13 +13,11 @@ from reportlab.platypus import (
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 
-PAGE_WIDTH, PAGE_HEIGHT = A4
-
 # =========================================================
 # UI
 # =========================================================
 st.title("📊 Investment Product Explorer V3")
-st.caption("Final Stable Version + Professional PDF")
+st.caption("Final Version (Report Ready)")
 
 report_date = st.date_input("📅 报告日期", value=datetime.today())
 
@@ -58,7 +56,7 @@ def clean_text(text):
     return re.sub(r"\s+", " ", text.lower())
 
 # =========================================================
-# 分类（稳定）
+# 分类逻辑（V3）
 # =========================================================
 def classify(text):
 
@@ -107,14 +105,25 @@ def classify(text):
         return "Others", "Unknown"
 
 # =========================================================
-# ✅ PDF生成（最终正确版 ✅）
+# ✅ PDF生成（最终版 ✅）
 # =========================================================
 def generate_pdf(grouped, image_list):
 
     styles = getSampleStyleSheet()
 
-    # ✅ 文件名（满足你要求）
     filename = f"/tmp/Weekly Product Idea {report_date}.pdf"
+
+    # ✅ 小边距（让图最大）
+    doc = SimpleDocTemplate(
+        filename,
+        pagesize=A4,
+        leftMargin=20,
+        rightMargin=20,
+        topMargin=30,
+        bottomMargin=20
+    )
+
+    story = []
 
     ordered_main = [
         "FCN",
@@ -126,39 +135,29 @@ def generate_pdf(grouped, image_list):
         "Others"
     ]
 
-    doc = SimpleDocTemplate(filename, pagesize=A4)
-
-    story = []
-
-    # =====================================================
-    # ✅ header函数（按页传入）
-    # =====================================================
-    def draw_header(category):
-        def _draw(canvas, doc):
-            canvas.setFont("Helvetica", 10)
-            canvas.drawRightString(
-                PAGE_WIDTH - 40,
-                PAGE_HEIGHT - 30,
-                category
-            )
-        return _draw
-
+    # =========================
     # ✅ 封面
+    # =========================
     story.append(Paragraph("Weekly Product Idea", styles["Title"]))
     story.append(Spacer(1, 40))
     story.append(Paragraph(str(report_date), styles["Normal"]))
     story.append(PageBreak())
 
-    # =====================================================
-    # ✅ 每个分类单独 build（关键 ✅）
-    # =====================================================
+    # =========================
+    # ✅ 分类结构
+    # =========================
     for main in ordered_main:
 
         if main not in grouped:
             continue
 
-        slides = []
+        # ✅ 分类标题页（单独 ✅）
+        story.append(Spacer(1, 200))
+        story.append(Paragraph(f"<b>{main}</b>", styles["Title"]))
+        story.append(PageBreak())
 
+        # ✅ flatten slides
+        slides = []
         if main == "Others":
             for sub in grouped[main].values():
                 slides.extend(sub)
@@ -166,6 +165,7 @@ def generate_pdf(grouped, image_list):
             for sub in grouped[main].values():
                 slides.extend(sub)
 
+        # ✅ 每页6张
         for i in range(0, len(slides), 6):
 
             batch = slides[i:i+6]
@@ -178,13 +178,16 @@ def generate_pdf(grouped, image_list):
                 page_num = slide["page"]
                 img_path = image_list[page_num - 1]
 
+                # ✅ 保持比例 + 放大
                 img = RLImage(img_path)
-                img._restrictSize(230, 160)
+                img._restrictSize(260, 180)
 
-                row.append([
-                    Paragraph(f"<b>Page {page_num}</b>", styles["Normal"]),
+                cell = [
+                    Paragraph(f"<font size=8>Page {page_num}</font>", styles["Normal"]),
                     img
-                ])
+                ]
+
+                row.append(cell)
 
                 if len(row) == 2:
                     table_data.append(row)
@@ -193,21 +196,21 @@ def generate_pdf(grouped, image_list):
             if row:
                 table_data.append(row)
 
-            table = Table(table_data, colWidths=[260, 260])
+            table = Table(
+                table_data,
+                colWidths=[260, 260]
+            )
+
             story.append(table)
 
-            # ✅ 每页单独绑定header（关键 ✅）
-            story.append(PageBreak())
+            # ✅ 内容分页（仅内容）
+            if i + 6 < len(slides):
+                story.append(PageBreak())
 
-        # ✅ 分类之间分页
+        # ✅ 分类结束分页
         story.append(PageBreak())
 
-    # ✅ 最终 build（统一执行）
-    doc.build(
-        story,
-        onFirstPage=draw_header(""),
-        onLaterPages=draw_header("")  # 默认，后面被覆盖
-    )
+    doc.build(story)
 
     return filename
 
@@ -236,7 +239,7 @@ if ppt_file and pdf_file:
         st.error("❌ 页数不一致")
         st.stop()
 
-    # ✅ 正确group构建（关键 ✅）
+    # ✅ 正确group（关键）
     grouped = {}
 
     for slide in slides_data:
