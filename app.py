@@ -1,5 +1,4 @@
 
-
 import streamlit as st
 from pptx import Presentation
 import fitz
@@ -11,7 +10,7 @@ from datetime import datetime
 # ✅ 页面标题
 # =========================================================
 st.title("📊 Investment Product Explorer V2")
-st.caption("Professional Classification + Clean Structure")
+st.caption("Clean Classification Structure")
 
 report_date = st.date_input("📅 报告日期", value=datetime.today())
 
@@ -20,12 +19,12 @@ report_date = st.date_input("📅 报告日期", value=datetime.today())
 # =========================================================
 st.info("""
 📌 使用说明：
-请上传【同一份文件】的：
+上传同一份文件的：
 
-1️⃣ PPTX（用于分类）  
-2️⃣ PDF（用于展示）
+1️⃣ PPTX（分类）  
+2️⃣ PDF（展示）
 
-⚠️ 页数必须完全一致
+⚠️ 页数必须一致
 """)
 
 # =========================================================
@@ -38,10 +37,9 @@ slides_data = []
 image_list = []
 
 # =========================================================
-# ✅ PDF转图片
+# ✅ PDF → 图片
 # =========================================================
 def pdf_to_images(pdf_file):
-
     images = []
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
@@ -60,27 +58,40 @@ def pdf_to_images(pdf_file):
     return images
 
 # =========================================================
-# ✅ 清洗文本
+# ✅ 文本清洗
 # =========================================================
 def clean_text(text):
-    text = text.lower()
-    text = re.sub(r"\s+", " ", text)
-    return text
+    return re.sub(r"\s+", " ", text.lower())
 
 # =========================================================
-# ✅ V2 分类逻辑（最终版）
+# ✅ 分类逻辑（最终版 ✅）
 # =========================================================
 def classify(text):
 
-    # ===== 核心产品 =====
-    if "fcn" in text:
-        return "FCN", "FCN"
+    # ✅ DCI 优先（关键）
+    if "dci" in text:
 
+        if "dual" in text and "range accrual" in text:
+            return "DCI", "Dual Range Accrual DCI"
+
+        elif "range accrual" in text:
+            return "DCI", "Range Accrual DCI"
+
+        else:
+            return "DCI", "Vanilla DCI"
+
+    # ✅ Range Accrual（纯）
     elif "range accrual" in text:
-        return "Range Accrual", "Range Accrual"
 
-    elif "dci" in text:
-        return "DCI", "DCI"
+        if "dual" in text:
+            return "Range Accrual", "Dual Accrual Note"
+
+        else:
+            return "Range Accrual", "Accrual Note"
+
+    # ✅ 主分类
+    elif "fcn" in text:
+        return "FCN", "FCN"
 
     elif "sharkfin" in text:
         return "Sharkfin", "Sharkfin"
@@ -91,7 +102,7 @@ def classify(text):
     elif "fund" in text or "bluebay" in text or "singularity" in text:
         return "Fund", "Fund"
 
-    # ===== Others =====
+    # ✅ Others
     elif "twinwin" in text:
         return "Others", "Twinwin"
 
@@ -121,9 +132,9 @@ def classify(text):
 # =========================================================
 if ppt_file and pdf_file:
 
-    # ✅ 读取PPT
     prs = Presentation(ppt_file)
 
+    # ✅ 读取PPT
     for i, slide in enumerate(prs.slides):
 
         text_content = ""
@@ -137,21 +148,22 @@ if ppt_file and pdf_file:
             "text": text_content
         })
 
-    # ✅ PDF转图片
+    # ✅ PDF处理
     image_list = pdf_to_images(pdf_file)
 
     # ✅ 页数校验
     if len(slides_data) != len(image_list):
+
         st.error(f"""
 ❌ 页数不一致！
 
-PPT：{len(slides_data)} 页  
-PDF：{len(image_list)} 页
+PPT：{len(slides_data)}  
+PDF：{len(image_list)}
 """)
         st.stop()
 
     # =====================================================
-    # ✅ 分类构建（已彻底修复bug ✅）
+    # ✅ 分类构建
     # =====================================================
     grouped = {}
 
@@ -163,7 +175,7 @@ PDF：{len(image_list)} 页
         if main not in grouped:
             grouped[main] = {}
 
-        if sub not in grouped[main]:   # ✅ 修复关键bug
+        if sub not in grouped[main]:
             grouped[main][sub] = []
 
         grouped[main][sub].append(slide)
@@ -181,29 +193,49 @@ PDF：{len(image_list)} 页
         "Others"
     ]
 
+    # =====================================================
+    # ✅ UI展示（V2 Final ✅）
+    # =====================================================
     for main_category in ordered_main:
 
         if main_category not in grouped:
             continue
 
-        st.subheader(f"📂 {main_category}")
+        st.subheader(f"📂 {main_category} ({sum(len(v) for v in grouped[main_category].values())})")
 
-        # ✅ 排序：Unknown 永远最后
-        sorted_subcats = sorted(
-            grouped[main_category].keys(),
-            key=lambda x: (x == "Unknown", x)
-        )
+        # ✅ Others（唯一有子分类）
+        if main_category == "Others":
 
-        for sub_category in sorted_subcats:
+            sorted_subcats = sorted(
+                grouped[main_category].keys(),
+                key=lambda x: (x == "Unknown", x)
+            )
 
-            slides_list = grouped[main_category][sub_category]
+            for sub_category in sorted_subcats:
 
-            with st.expander(f"{sub_category} ({len(slides_list)})"):
+                slides_list = grouped[main_category][sub_category]
 
-                for slide in slides_list:
+                with st.expander(f"{sub_category} ({len(slides_list)})"):
 
-                    page_num = slide["page"]
+                    for slide in slides_list:
 
-                    st.markdown(f"**Page {page_num}**")
-                    st.image(image_list[page_num - 1], use_container_width=True)
+                        page_num = slide["page"]
+
+                        st.markdown(f"**Page {page_num}**")
+                        st.image(image_list[page_num - 1], use_container_width=True)
+
+        # ✅ 其他分类（不分子类 ✅）
+        else:
+
+            slides_list = []
+
+            for sub_list in grouped[main_category].values():
+                slides_list.extend(sub_list)
+
+            for slide in slides_list:
+
+                page_num = slide["page"]
+
+                st.markdown(f"**Page {page_num}**")
+                st.image(image_list[page_num - 1], use_container_width=True)
 
