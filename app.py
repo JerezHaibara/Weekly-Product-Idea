@@ -59,33 +59,33 @@ def clean_text(text):
 
 
 # =========================================================
-# 分类（增强版）
+# 分类（严格版）
 # =========================================================
 def classify(raw_text):
 
     text = clean_text(raw_text)
 
-    # ✅ Unclassified（空页 / 切割页）
+    # ✅ Unclassified
     if len(text.strip()) < 15:
         return "Unclassified", "Empty"
 
     if "dci" in text:
-        return "DCI", "DCI"
+        return "DCI", None
 
     elif "range accrual" in text:
-        return "Accrual Note", "Accrual Note"
+        return "Accrual Note", None
 
     elif "fcn" in text:
-        return "FCN", "FCN"
+        return "FCN", None
 
     elif "sharkfin" in text:
-        return "Sharkfin", "Sharkfin"
+        return "Sharkfin", None
 
     elif "aq" in text:
-        return "AQ", "AQ"
+        return "AQ", None
 
     elif "fund" in text:
-        return "Fund", "Fund"
+        return "Fund", None
 
     elif "twinwin" in text:
         return "Others", "Twinwin"
@@ -101,7 +101,7 @@ def classify(raw_text):
 
 
 # =========================================================
-# ✅ PDF生成
+# PDF生成
 # =========================================================
 def generate_pdf(grouped, image_list):
 
@@ -120,7 +120,7 @@ def generate_pdf(grouped, image_list):
 
     story = []
 
-    # ✅ 优先级排序（关键✅）
+    # ✅ 排序
     priority_map = {
         "FCN": 1,
         "Accrual Note": 2,
@@ -132,10 +132,7 @@ def generate_pdf(grouped, image_list):
         "Unclassified": 100
     }
 
-    ordered_main = sorted(
-        grouped.keys(),
-        key=lambda x: priority_map.get(x, 999)
-    )
+    ordered_main = sorted(grouped.keys(), key=lambda x: priority_map.get(x, 999))
 
     # =========================
     # ✅ 目录
@@ -144,7 +141,6 @@ def generate_pdf(grouped, image_list):
     story.append(Spacer(1, 20))
 
     for main in ordered_main:
-
         total = sum(len(v) for v in grouped[main].values())
         story.append(Paragraph(f"{main} ({total})", styles["Normal"]))
 
@@ -156,18 +152,22 @@ def generate_pdf(grouped, image_list):
     for main in ordered_main:
 
         sub_dict = grouped[main]
-        slides = []
 
-        for sub in sub_dict.values():
-            slides.extend(sub)
+        # ✅ flatten（主类直接用）
+        if main in ["FCN", "Accrual Note", "DCI", "Sharkfin", "AQ", "Fund"]:
+            slides = sub_dict["all"]
+        else:
+            slides = []
+            for v in sub_dict.values():
+                slides.extend(v)
 
         count = len(slides)
 
-        # ✅ 分类标题页
+        # ✅ 标题页
         story.append(Spacer(1, 200))
         story.append(Paragraph(f"<b>{main} ({count})</b>", styles["Title"]))
 
-        # ✅ Others子分类排序
+        # ✅ Others显示子分类
         if main == "Others":
 
             story.append(Spacer(1, 20))
@@ -178,14 +178,13 @@ def generate_pdf(grouped, image_list):
             )
 
             for sub in sorted_sub:
-                items = sub_dict[sub]
                 story.append(
-                    Paragraph(f"{sub} ({len(items)})", styles["Normal"])
+                    Paragraph(f"{sub} ({len(sub_dict[sub])})", styles["Normal"])
                 )
 
         story.append(PageBreak())
 
-        # ✅ 图片页（6 per page）
+        # ✅ 图片页
         for i in range(0, len(slides), 6):
 
             batch = slides[i:i+6]
@@ -199,12 +198,10 @@ def generate_pdf(grouped, image_list):
                 img = RLImage(image_list[page_num - 1])
                 img._restrictSize(260, 180)
 
-                cell = [
+                row.append([
                     Paragraph(f"<font size=7>Page {page_num}</font>", styles["Normal"]),
                     img
-                ]
-
-                row.append(cell)
+                ])
 
                 if len(row) == 2:
                     table_data.append(row)
@@ -245,9 +242,9 @@ if ppt_file and pdf_file:
 
     image_list = pdf_to_images(pdf_file)
 
-    # ✅ 构建分类
     grouped = {}
 
+    # ✅ 构建分类
     for slide in slides_data:
 
         main, sub = classify(slide["text"])
@@ -255,12 +252,18 @@ if ppt_file and pdf_file:
         if main not in grouped:
             grouped[main] = {}
 
-        if sub not in grouped[main]:
-            grouped[main][sub] = []
+        # ✅ 主类直接 flatten
+        if sub is None:
+            if "all" not in grouped[main]:
+                grouped[main]["all"] = []
+            grouped[main]["all"].append(slide)
 
-        grouped[main][sub].append(slide)
+        else:
+            if sub not in grouped[main]:
+                grouped[main][sub] = []
+            grouped[main][sub].append(slide)
 
-    # ✅ 同样排序 UI
+    # ✅ 排序
     priority_map = {
         "FCN": 1,
         "Accrual Note": 2,
@@ -272,10 +275,7 @@ if ppt_file and pdf_file:
         "Unclassified": 100
     }
 
-    ordered_main = sorted(
-        grouped.keys(),
-        key=lambda x: priority_map.get(x, 999)
-    )
+    ordered_main = sorted(grouped.keys(), key=lambda x: priority_map.get(x, 999))
 
     # =========================
     # ✅ UI
@@ -283,24 +283,27 @@ if ppt_file and pdf_file:
     for main in ordered_main:
 
         sub_dict = grouped[main]
-        total = sum(len(v) for v in sub_dict.values())
 
-        with st.expander(f"{main} ({total})"):
+        if main in ["FCN", "Accrual Note", "DCI", "Sharkfin", "AQ", "Fund"]:
+            slides = sub_dict["all"]
+            with st.expander(f"{main} ({len(slides)})"):
 
-            sorted_sub = sorted(
-                sub_dict.keys(),
-                key=lambda x: (x in ["Unknown", "Empty"], x)
-            )
+                for s in slides:
+                    st.markdown(f"Page {s['page']}")
+                    st.image(image_list[s["page"] - 1])
 
-            for sub in sorted_sub:
+        else:
 
-                slides = sub_dict[sub]
+            total = sum(len(v) for v in sub_dict.values())
+            with st.expander(f"{main} ({total})"):
 
-                with st.expander(f"{sub} ({len(slides)})"):
+                for sub, slides in sub_dict.items():
 
-                    for s in slides:
-                        st.markdown(f"Page {s['page']}")
-                        st.image(image_list[s["page"] - 1])
+                    with st.expander(f"{sub} ({len(slides)})"):
+
+                        for s in slides:
+                            st.markdown(f"Page {s['page']}")
+                            st.image(image_list[s["page"] - 1])
 
     # =========================
     # ✅ PDF下载
