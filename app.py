@@ -260,8 +260,9 @@ if ppt_file and pdf_file:
 
 
         else:
-            if sub not in groupedgrouped[main][sub] = []
-            grouped[main][sub].append(slide)
+            if sub not in grouped[main]:
+            grouped[main][sub] = []
+
 
     # ✅ 排序
     priority_map = {
