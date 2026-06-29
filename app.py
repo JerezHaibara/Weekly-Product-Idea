@@ -6,30 +6,26 @@ import tempfile
 import re
 from datetime import datetime
 
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.pagesizes import A4
+
 # =========================================================
-# ✅ 页面标题
+# 页面
 # =========================================================
-st.title("📊 Investment Product Explorer V2")
-st.caption("Clean Classification Structure")
+st.title("📊 Investment Product Explorer V3")
+st.caption("Clean Classification + Exportable Report")
 
 report_date = st.date_input("📅 报告日期", value=datetime.today())
 
-# =========================================================
-# ✅ 使用说明
-# =========================================================
 st.info("""
-📌 使用说明：
-上传同一份文件的：
-
-1️⃣ PPTX（分类）  
+上传同一份文件：
+1️⃣ PPTX（分类）
 2️⃣ PDF（展示）
 
 ⚠️ 页数必须一致
 """)
 
-# =========================================================
-# ✅ 上传文件
-# =========================================================
 ppt_file = st.file_uploader("Upload PPTX", type=["pptx"])
 pdf_file = st.file_uploader("Upload PDF", type=["pdf"])
 
@@ -37,9 +33,10 @@ slides_data = []
 image_list = []
 
 # =========================================================
-# ✅ PDF → 图片
+# PDF → 图片
 # =========================================================
 def pdf_to_images(pdf_file):
+
     images = []
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
@@ -58,21 +55,21 @@ def pdf_to_images(pdf_file):
     return images
 
 # =========================================================
-# ✅ 文本清洗
+# 文本处理
 # =========================================================
 def clean_text(text):
     return re.sub(r"\s+", " ", text.lower())
 
 # =========================================================
-# ✅ 分类逻辑（最终版）
+# ✅ V3 分类逻辑（最终稳定版）
 # =========================================================
 def classify(text):
 
-    # ✅ DCI 优先（关键）
+    # ✅ DCI优先（核心规则）
     if "dci" in text:
 
         if "dual" in text and "range accrual" in text:
-            return "DCI", "Dual Range Accrual DCI"
+            return "DCI", "Dual Range DCI"
 
         elif "range accrual" in text:
             return "DCI", "Range Accrual DCI"
@@ -80,16 +77,15 @@ def classify(text):
         else:
             return "DCI", "Vanilla DCI"
 
-    # ✅ Accrual Note（原 Range Accrual）
+    # ✅ Accrual Note（纯）
     elif "range accrual" in text:
 
         if "dual" in text:
             return "Accrual Note", "Dual Accrual Note"
-
         else:
             return "Accrual Note", "Accrual Note"
 
-    # ✅ 主分类
+    # ✅ 主类
     elif "fcn" in text:
         return "FCN", "FCN"
 
@@ -128,13 +124,106 @@ def classify(text):
         return "Others", "Unknown"
 
 # =========================================================
-# ✅ 主逻辑
+# ✅ PDF（带目录）
+# =========================================================
+def generate_toc_pdf(grouped, image_list):
+
+    output_path = "/tmp/report_v3.pdf"
+
+    doc = SimpleDocTemplate(output_path, pagesize=A4)
+    styles = getSampleStyleSheet()
+    content = []
+
+    ordered_main = [
+        "FCN",
+        "Accrual Note",
+        "DCI",
+        "Sharkfin",
+        "AQ",
+        "Fund",
+        "Others"
+    ]
+
+    # ✅ 封面
+    content.append(Paragraph("Investment Product Report", styles["Title"]))
+    content.append(Spacer(1, 50))
+    content.append(Paragraph(str(report_date), styles["Normal"]))
+    content.append(PageBreak())
+
+    # ✅ 目录
+    content.append(Paragraph("Table of Contents", styles["Heading1"]))
+    content.append(Spacer(1, 20))
+
+    page_index = 2
+    page_map = {}
+
+    for main in ordered_main:
+        if main in grouped:
+            page_map[main] = page_index
+            page_index += sum(len(v) for v in grouped[main].values()) + 1
+
+    for main in ordered_main:
+        if main in page_map:
+            content.append(
+                Paragraph(f"{main} ...... Page {page_map[main]}", styles["Normal"])
+            )
+            content.append(Spacer(1, 8))
+
+    content.append(PageBreak())
+
+    # ✅ 内容
+    for main in ordered_main:
+
+        if main not in grouped:
+            continue
+
+        content.append(Paragraph(f"<b>{main}</b>", styles["Heading1"]))
+        content.append(Spacer(1, 10))
+
+        # Others（有子类）
+        if main == "Others":
+
+            sorted_sub = sorted(
+                grouped[main].keys(),
+                key=lambda x: (x == "Unknown", x)
+            )
+
+            for sub in sorted_sub:
+
+                content.append(Paragraph(sub, styles["Heading2"]))
+
+                for slide in grouped[main][sub]:
+                    page_num = slide["page"]
+                    img = image_list[page_num - 1]
+
+                    content.append(Paragraph(f"Page {page_num}", styles["Normal"]))
+                    content.append(RLImage(img, width=400, height=300))
+                    content.append(Spacer(1, 12))
+
+        else:
+
+            for sub in grouped[main].values():
+                for slide in sub:
+                    page_num = slide["page"]
+                    img = image_list[page_num - 1]
+
+                    content.append(Paragraph(f"Page {page_num}", styles["Normal"]))
+                    content.append(RLImage(img, width=400, height=300))
+                    content.append(Spacer(1, 12))
+
+        content.append(PageBreak())
+
+    doc.build(content)
+
+    return output_path
+
+# =========================================================
+# 主逻辑
 # =========================================================
 if ppt_file and pdf_file:
 
     prs = Presentation(ppt_file)
 
-    # ✅ 读取 PPT
     for i, slide in enumerate(prs.slides):
 
         text_content = ""
@@ -148,41 +237,28 @@ if ppt_file and pdf_file:
             "text": text_content
         })
 
-    # ✅ PDF 转图
     image_list = pdf_to_images(pdf_file)
 
-    # ✅ 页数校验
     if len(slides_data) != len(image_list):
-
-        st.error(f"""
-❌ 页数不一致！
-
-PPT：{len(slides_data)}  
-PDF：{len(image_list)}
-""")
+        st.error("❌ 页数不一致")
         st.stop()
 
-    # =====================================================
-    # ✅ 分类构建（已修复所有bug）
-    # =====================================================
     grouped = {}
 
     for slide in slides_data:
 
-        cleaned = clean_text(slide["text"])
-        main, sub = classify(cleaned)
+        text = clean_text(slide["text"])
+        main, sub = classify(text)
 
         if main not in grouped:
             grouped[main] = {}
 
-        if sub not in grouped[main]:
+        if sub not in grouped[grouped[main]]:
             grouped[main][sub] = []
 
         grouped[main][sub].append(slide)
 
-    # =====================================================
-    # ✅ 展示顺序
-    # =====================================================
+    # ✅ UI
     ordered_main = [
         "FCN",
         "Accrual Note",
@@ -193,51 +269,45 @@ PDF：{len(image_list)}
         "Others"
     ]
 
-    # =====================================================
-    # ✅ UI 展示（最终版本 ✅）
-    # =====================================================
-    for main_category in ordered_main:
+    for main in ordered_main:
 
-        if main_category not in grouped:
+        if main not in grouped:
             continue
 
-        total_count = sum(len(v) for v in grouped[main_category].values())
+        count = sum(len(v) for v in grouped[main].values())
 
-        with st.expander(f"📂 {main_category} ({total_count})", expanded=False):
+        with st.expander(f"📂 {main} ({count})"):
 
-            # ✅ Others（唯一二级分类）
-            if main_category == "Others":
+            if main == "Others":
 
-                sorted_subcats = sorted(
-                    grouped[main_category].keys(),
+                sorted_sub = sorted(
+                    grouped[main].keys(),
                     key=lambda x: (x == "Unknown", x)
                 )
 
-                for sub_category in sorted_subcats:
+                for sub in sorted_sub:
 
-                    slides_list = grouped[main_category][sub_category]
+                    slides = grouped[main][sub]
 
-                    with st.expander(f"{sub_category} ({len(slides_list)})"):
+                    with st.expander(f"{sub} ({len(slides)})"):
 
-                        for slide in slides_list:
+                        for s in slides:
+                            st.markdown(f"**Page {s['page']}**")
+                            st.image(image_list[s["page"] - 1])
 
-                            page_num = slide["page"]
-
-                            st.markdown(f"**Page {page_num}**")
-                            st.image(image_list[page_num - 1], use_container_width=True)
-
-            # ✅ 其他分类（不分子类）
             else:
 
-                slides_list = []
+                all_slides = []
+                for v in grouped[main].values():
+                    all_slides.extend(v)
 
-                for sub_list in grouped[main_category].values():
-                    slides_list.extend(sub_list)
+                for s in all_slides:
+                    st.markdown(f"**Page {s['page']}**")
+                    st.image(image_list[s["page"] - 1])
 
-                for slide in slides_list:
+    # ✅ PDF导出
+    pdf_path = generate_toc_pdf(grouped, image_list)
 
-                    page_num = slide["page"]
-
-                    st.markdown(f"**Page {page_num}**")
-                    st.image(image_list[page_num - 1], use_container_width=True)
+    with open(pdf_path, "rb") as f:
+        st.download_button("📄 下载PDF报告（带目录）", f, "report.pdf")
 
