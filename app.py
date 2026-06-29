@@ -16,9 +16,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 # =========================================================
 # UI
 # =========================================================
-st.title("📊 Investment Product Explorer V3")
-st.caption("Final Version (Report Ready)")
-
+st.title("📊 Investment Product Explorer V3 FINAL")
 report_date = st.date_input("📅 报告日期", value=datetime.today())
 
 ppt_file = st.file_uploader("Upload PPTX", type=["pptx"])
@@ -56,17 +54,18 @@ def clean_text(text):
     return re.sub(r"\s+", " ", text.lower())
 
 # =========================================================
-# 分类逻辑（V3）
+# 分类（增强版）
 # =========================================================
-def classify(text):
+def classify(raw_text):
+
+    text = clean_text(raw_text)
+
+    # ✅ Unclassified
+    if len(text.strip()) < 15:
+        return "Unclassified", "Empty"
 
     if "dci" in text:
-        if "dual" in text and "range accrual" in text:
-            return "DCI", "Dual Range DCI"
-        elif "range accrual" in text:
-            return "DCI", "Range DCI"
-        else:
-            return "DCI", "Vanilla DCI"
+        return "DCI", "DCI"
 
     elif "range accrual" in text:
         return "Accrual Note", "Accrual Note"
@@ -86,26 +85,17 @@ def classify(text):
     elif "twinwin" in text:
         return "Others", "Twinwin"
 
-    elif "digital" in text:
-        return "Others", "Digital"
-
-    elif "ben" in text:
-        return "Others", "BEN"
-
     elif "dq" in text:
         return "Others", "DQ"
 
-    elif "tarf" in text:
-        return "Others", "TARF"
-
-    elif "inverse" in text:
-        return "Others", "Inverse Floater"
+    elif "ben" in text:
+        return "Others", "BEN"
 
     else:
         return "Others", "Unknown"
 
 # =========================================================
-# ✅ PDF生成（最终版 ✅）
+# ✅ PDF生成（终极版）
 # =========================================================
 def generate_pdf(grouped, image_list):
 
@@ -113,18 +103,18 @@ def generate_pdf(grouped, image_list):
 
     filename = f"/tmp/Weekly Product Idea {report_date}.pdf"
 
-    # ✅ 小边距（让图最大）
     doc = SimpleDocTemplate(
         filename,
         pagesize=A4,
-        leftMargin=20,
-        rightMargin=20,
+        leftMargin=15,
+        rightMargin=15,
         topMargin=30,
-        bottomMargin=20
+        bottomMargin=15
     )
 
     story = []
 
+    # 排序
     ordered_main = [
         "FCN",
         "Accrual Note",
@@ -132,58 +122,73 @@ def generate_pdf(grouped, image_list):
         "Sharkfin",
         "AQ",
         "Fund",
-        "Others"
+        "Others",
+        "Unclassified"
     ]
 
-    # =========================
-    # ✅ 封面
-    # =========================
-    story.append(Paragraph("Weekly Product Idea", styles["Title"]))
-    story.append(Spacer(1, 40))
-    story.append(Paragraph(str(report_date), styles["Normal"]))
+    # =====================================================
+    # ✅ 目录
+    # =====================================================
+    story.append(Paragraph("Table of Contents", styles["Title"]))
+    story.append(Spacer(1, 20))
+
+    for main in ordered_main:
+        if main in grouped:
+            count = sum(len(v) for v in grouped[main].values())
+            story.append(Paragraph(f"{main} ({count})", styles["Normal"]))
+            story.append(Spacer(1, 5))
+
     story.append(PageBreak())
 
-    # =========================
-    # ✅ 分类结构
-    # =========================
+    # =====================================================
+    # ✅ 内容
+    # =====================================================
     for main in ordered_main:
 
         if main not in grouped:
             continue
 
-        # ✅ 分类标题页（单独 ✅）
+        slides = []
+        for sub in grouped[main].values():
+            slides.extend(sub)
+
+        count = len(slides)
+
+        # =========================
+        # ✅ 分类标题页
+        # =========================
         story.append(Spacer(1, 200))
-        story.append(Paragraph(f"<b>{main}</b>", styles["Title"]))
+        story.append(Paragraph(f"<b>{main} ({count})</b>", styles["Title"]))
+
+        # ✅ Others加子分类
+        if main == "Others":
+
+            story.append(Spacer(1, 20))
+
+            for sub, items in grouped[main].items():
+                story.append(
+                    Paragraph(f"{sub} ({len(items)})", styles["Normal"])
+                )
+
         story.append(PageBreak())
 
-        # ✅ flatten slides
-        slides = []
-        if main == "Others":
-            for sub in grouped[main].values():
-                slides.extend(sub)
-        else:
-            for sub in grouped[main].values():
-                slides.extend(sub)
-
-        # ✅ 每页6张
+        # =========================
+        # ✅ 图片页
+        # =========================
         for i in range(0, len(slides), 6):
 
             batch = slides[i:i+6]
-
             table_data = []
             row = []
 
             for slide in batch:
 
                 page_num = slide["page"]
-                img_path = image_list[page_num - 1]
-
-                # ✅ 保持比例 + 放大
-                img = RLImage(img_path)
+                img = RLImage(image_list[page_num - 1])
                 img._restrictSize(260, 180)
 
                 cell = [
-                    Paragraph(f"<font size=8>Page {page_num}</font>", styles["Normal"]),
+                    Paragraph(f"<font size=7>Page {page_num}</font>", styles["Normal"]),
                     img
                 ]
 
@@ -196,26 +201,18 @@ def generate_pdf(grouped, image_list):
             if row:
                 table_data.append(row)
 
-            table = Table(
-                table_data,
-                colWidths=[260, 260]
-            )
+            story.append(Table(table_data, colWidths=[260, 260]))
 
-            story.append(table)
-
-            # ✅ 内容分页（仅内容）
             if i + 6 < len(slides):
                 story.append(PageBreak())
 
-        # ✅ 分类结束分页
         story.append(PageBreak())
 
     doc.build(story)
-
     return filename
 
 # =========================================================
-# 主流程
+# 主逻辑
 # =========================================================
 if ppt_file and pdf_file:
 
@@ -235,17 +232,11 @@ if ppt_file and pdf_file:
 
     image_list = pdf_to_images(pdf_file)
 
-    if len(slides_data) != len(image_list):
-        st.error("❌ 页数不一致")
-        st.stop()
-
-    # ✅ 正确group（关键）
     grouped = {}
 
     for slide in slides_data:
 
-        text = clean_text(slide["text"])
-        main, sub = classify(text)
+        main, sub = classify(slide["text"])
 
         if main not in grouped:
             grouped[main] = {}
@@ -256,45 +247,21 @@ if ppt_file and pdf_file:
         grouped[main][sub].append(slide)
 
     # =====================================================
-    # UI展示
+    # UI
     # =====================================================
-    ordered_main = [
-        "FCN",
-        "Accrual Note",
-        "DCI",
-        "Sharkfin",
-        "AQ",
-        "Fund",
-        "Others"
-    ]
+    for main, sub_dict in grouped.items():
 
-    for main in ordered_main:
+        total = sum(len(v) for v in sub_dict.values())
 
-        if main not in grouped:
-            continue
+        with st.expander(f"{main} ({total})"):
 
-        count = sum(len(v) for v in grouped[main].values())
+            for sub, slides in sub_dict.items():
 
-        with st.expander(f"📂 {main} ({count})"):
+                with st.expander(f"{sub} ({len(slides)})"):
 
-            if main == "Others":
-
-                for sub, slides in grouped[main].items():
-
-                    with st.expander(f"{sub} ({len(slides)})"):
-
-                        for s in slides:
-                            st.markdown(f"**Page {s['page']}**")
-                            st.image(image_list[s["page"] - 1])
-
-            else:
-                flat = []
-                for v in grouped[main].values():
-                    flat.extend(v)
-
-                for s in flat:
-                    st.markdown(f"**Page {s['page']}**")
-                    st.image(image_list[s["page"] - 1])
+                    for s in slides:
+                        st.markdown(f"Page {s['page']}")
+                        st.image(image_list[s["page"] - 1])
 
     # =====================================================
     # PDF下载
