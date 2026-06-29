@@ -13,10 +13,11 @@ from reportlab.platypus import (
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 
+
 # =========================================================
 # UI
 # =========================================================
-st.title("📊 Investment Product Explorer V4")
+st.title("📊 Investment Product Explorer V4 FINAL")
 
 report_date = st.date_input("📅 报告日期", value=datetime.today())
 
@@ -25,6 +26,7 @@ pdf_file = st.file_uploader("Upload PDF", type=["pdf"])
 
 slides_data = []
 image_list = []
+
 
 # =========================================================
 # PDF → 图片
@@ -48,20 +50,22 @@ def pdf_to_images(pdf_file):
 
     return images
 
+
 # =========================================================
 # 清洗
 # =========================================================
 def clean_text(text):
     return re.sub(r"\s+", " ", text.lower())
 
+
 # =========================================================
-# 分类
+# 分类（增强版）
 # =========================================================
 def classify(raw_text):
 
     text = clean_text(raw_text)
 
-    # ✅ Unclassified（空页 / PPT切割页）
+    # ✅ Unclassified（空页 / 切割页）
     if len(text.strip()) < 15:
         return "Unclassified", "Empty"
 
@@ -95,8 +99,9 @@ def classify(raw_text):
     else:
         return "Others", "Unknown"
 
+
 # =========================================================
-# PDF 生成
+# ✅ PDF生成
 # =========================================================
 def generate_pdf(grouped, image_list):
 
@@ -115,16 +120,22 @@ def generate_pdf(grouped, image_list):
 
     story = []
 
-    ordered_main = [
-        "FCN",
-        "Accrual Note",
-        "DCI",
-        "Sharkfin",
-        "AQ",
-        "Fund",
-        "Others",
-        "Unclassified"
-    ]
+    # ✅ 优先级排序（关键✅）
+    priority_map = {
+        "FCN": 1,
+        "Accrual Note": 2,
+        "DCI": 3,
+        "Sharkfin": 4,
+        "AQ": 5,
+        "Fund": 6,
+        "Others": 99,
+        "Unclassified": 100
+    }
+
+    ordered_main = sorted(
+        grouped.keys(),
+        key=lambda x: priority_map.get(x, 999)
+    )
 
     # =========================
     # ✅ 目录
@@ -133,10 +144,9 @@ def generate_pdf(grouped, image_list):
     story.append(Spacer(1, 20))
 
     for main in ordered_main:
-        if main in grouped:
-            count = sum(len(v) for v in grouped[main].values())
-            story.append(Paragraph(f"{main} ({count})", styles["Normal"]))
-            story.append(Spacer(1, 5))
+
+        total = sum(len(v) for v in grouped[main].values())
+        story.append(Paragraph(f"{main} ({total})", styles["Normal"]))
 
     story.append(PageBreak())
 
@@ -145,11 +155,10 @@ def generate_pdf(grouped, image_list):
     # =========================
     for main in ordered_main:
 
-        if main not in grouped:
-            continue
-
+        sub_dict = grouped[main]
         slides = []
-        for sub in grouped[main].values():
+
+        for sub in sub_dict.values():
             slides.extend(sub)
 
         count = len(slides)
@@ -158,19 +167,25 @@ def generate_pdf(grouped, image_list):
         story.append(Spacer(1, 200))
         story.append(Paragraph(f"<b>{main} ({count})</b>", styles["Title"]))
 
-        # ✅ Others子分类
+        # ✅ Others子分类排序
         if main == "Others":
 
             story.append(Spacer(1, 20))
 
-            for sub, items in grouped[main].items():
+            sorted_sub = sorted(
+                sub_dict.keys(),
+                key=lambda x: (x in ["Unknown", "Empty"], x)
+            )
+
+            for sub in sorted_sub:
+                items = sub_dict[sub]
                 story.append(
                     Paragraph(f"{sub} ({len(items)})", styles["Normal"])
                 )
 
         story.append(PageBreak())
 
-        # ✅ 图片页
+        # ✅ 图片页（6 per page）
         for i in range(0, len(slides), 6):
 
             batch = slides[i:i+6]
@@ -184,10 +199,12 @@ def generate_pdf(grouped, image_list):
                 img = RLImage(image_list[page_num - 1])
                 img._restrictSize(260, 180)
 
-                row.append([
+                cell = [
                     Paragraph(f"<font size=7>Page {page_num}</font>", styles["Normal"]),
                     img
-                ])
+                ]
+
+                row.append(cell)
 
                 if len(row) == 2:
                     table_data.append(row)
@@ -205,6 +222,7 @@ def generate_pdf(grouped, image_list):
 
     doc.build(story)
     return filename
+
 
 # =========================================================
 # 主逻辑
@@ -227,6 +245,7 @@ if ppt_file and pdf_file:
 
     image_list = pdf_to_images(pdf_file)
 
+    # ✅ 构建分类
     grouped = {}
 
     for slide in slides_data:
@@ -241,16 +260,41 @@ if ppt_file and pdf_file:
 
         grouped[main][sub].append(slide)
 
-    # =====================================================
-    # UI
-    # =====================================================
-    for main, sub_dict in grouped.items():
+    # ✅ 同样排序 UI
+    priority_map = {
+        "FCN": 1,
+        "Accrual Note": 2,
+        "DCI": 3,
+        "Sharkfin": 4,
+        "AQ": 5,
+        "Fund": 6,
+        "Others": 99,
+        "Unclassified": 100
+    }
 
+    ordered_main = sorted(
+        grouped.keys(),
+        key=lambda x: priority_map.get(x, 999)
+    )
+
+    # =========================
+    # ✅ UI
+    # =========================
+    for main in ordered_main:
+
+        sub_dict = grouped[main]
         total = sum(len(v) for v in sub_dict.values())
 
         with st.expander(f"{main} ({total})"):
 
-            for sub, slides in sub_dict.items():
+            sorted_sub = sorted(
+                sub_dict.keys(),
+                key=lambda x: (x in ["Unknown", "Empty"], x)
+            )
+
+            for sub in sorted_sub:
+
+                slides = sub_dict[sub]
 
                 with st.expander(f"{sub} ({len(slides)})"):
 
@@ -258,9 +302,9 @@ if ppt_file and pdf_file:
                         st.markdown(f"Page {s['page']}")
                         st.image(image_list[s["page"] - 1])
 
-    # =====================================================
-    # PDF下载
-    # =====================================================
+    # =========================
+    # ✅ PDF下载
+    # =========================
     pdf_path = generate_pdf(grouped, image_list)
 
     with open(pdf_path, "rb") as f:
