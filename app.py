@@ -302,4 +302,3 @@ if ppt_file and pdf_file:
 
     with open(pdf_path, "rb") as f:
         st.download_button("📄 下载PDF", f, "report.pdf")
-``
