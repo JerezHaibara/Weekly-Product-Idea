@@ -28,7 +28,7 @@ st.info("""
 """)
 
 # =========================================================
-# ✅ 上传
+# ✅ 上传文件
 # =========================================================
 ppt_file = st.file_uploader("Upload PPTX", type=["pptx"])
 pdf_file = st.file_uploader("Upload PDF", type=["pdf"])
@@ -64,7 +64,7 @@ def clean_text(text):
     return re.sub(r"\s+", " ", text.lower())
 
 # =========================================================
-# ✅ 分类逻辑（最终版 ✅）
+# ✅ 分类逻辑（最终版）
 # =========================================================
 def classify(text):
 
@@ -80,14 +80,14 @@ def classify(text):
         else:
             return "DCI", "Vanilla DCI"
 
-    # ✅ Range Accrual（纯）
+    # ✅ Accrual Note（原 Range Accrual）
     elif "range accrual" in text:
 
         if "dual" in text:
-            return "Range Accrual", "Dual Accrual Note"
+            return "Accrual Note", "Dual Accrual Note"
 
         else:
-            return "Range Accrual", "Accrual Note"
+            return "Accrual Note", "Accrual Note"
 
     # ✅ 主分类
     elif "fcn" in text:
@@ -134,7 +134,7 @@ if ppt_file and pdf_file:
 
     prs = Presentation(ppt_file)
 
-    # ✅ 读取PPT
+    # ✅ 读取 PPT
     for i, slide in enumerate(prs.slides):
 
         text_content = ""
@@ -148,7 +148,7 @@ if ppt_file and pdf_file:
             "text": text_content
         })
 
-    # ✅ PDF处理
+    # ✅ PDF 转图
     image_list = pdf_to_images(pdf_file)
 
     # ✅ 页数校验
@@ -163,7 +163,7 @@ PDF：{len(image_list)}
         st.stop()
 
     # =====================================================
-    # ✅ 分类构建
+    # ✅ 分类构建（已修复所有bug）
     # =====================================================
     grouped = {}
 
@@ -185,7 +185,7 @@ PDF：{len(image_list)}
     # =====================================================
     ordered_main = [
         "FCN",
-        "Range Accrual",
+        "Accrual Note",
         "DCI",
         "Sharkfin",
         "AQ",
@@ -194,47 +194,50 @@ PDF：{len(image_list)}
     ]
 
     # =====================================================
-    # ✅ UI展示（V2 Final ✅）
+    # ✅ UI 展示（最终版本 ✅）
     # =====================================================
     for main_category in ordered_main:
 
         if main_category not in grouped:
             continue
 
-        st.subheader(f"📂 {main_category} ({sum(len(v) for v in grouped[main_category].values())})")
+        total_count = sum(len(v) for v in grouped[main_category].values())
 
-        # ✅ Others（唯一有子分类）
-        if main_category == "Others":
+        with st.expander(f"📂 {main_category} ({total_count})", expanded=False):
 
-            sorted_subcats = sorted(
-                grouped[main_category].keys(),
-                key=lambda x: (x == "Unknown", x)
-            )
+            # ✅ Others（唯一二级分类）
+            if main_category == "Others":
 
-            for sub_category in sorted_subcats:
+                sorted_subcats = sorted(
+                    grouped[main_category].keys(),
+                    key=lambda x: (x == "Unknown", x)
+                )
 
-                slides_list = grouped[main_category][sub_category]
+                for sub_category in sorted_subcats:
 
-                with st.expander(f"{sub_category} ({len(slides_list)})"):
+                    slides_list = grouped[main_category][sub_category]
 
-                    for slide in slides_list:
+                    with st.expander(f"{sub_category} ({len(slides_list)})"):
 
-                        page_num = slide["page"]
+                        for slide in slides_list:
 
-                        st.markdown(f"**Page {page_num}**")
-                        st.image(image_list[page_num - 1], use_container_width=True)
+                            page_num = slide["page"]
 
-        # ✅ 其他分类（不分子类 ✅）
-        else:
+                            st.markdown(f"**Page {page_num}**")
+                            st.image(image_list[page_num - 1], use_container_width=True)
 
-            slides_list = []
+            # ✅ 其他分类（不分子类）
+            else:
 
-            for sub_list in grouped[main_category].values():
-                slides_list.extend(sub_list)
+                slides_list = []
 
-            for slide in slides_list:
+                for sub_list in grouped[main_category].values():
+                    slides_list.extend(sub_list)
 
-                page_num = slide["page"]
+                for slide in slides_list:
 
-                st.markdown(f"**Page {page_num}**")
-                st.image(image_list[page_num - 1], use_container_width=True)
+                    page_num = slide["page"]
+
+                    st.markdown(f"**Page {page_num}**")
+                    st.image(image_list[page_num - 1], use_container_width=True)
+
